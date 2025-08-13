@@ -40,7 +40,7 @@ docker compose build        # Rebuild with new Chrome version
 ```bash
 uv sync
 cp .env.example .env  # Edit with your API keys
-uv run -- uvicorn 'src.scraper.main:app' --host=0.0.0.0 --port=8000
+uv run -- uvicorn 'src.mcp_web_search.main:app' --host=0.0.0.0 --port=8000
 ```
 
 ## Configuration

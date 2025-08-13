@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.fastmcp import FastMCP
 import logging
 
-from scraper.cache import initialize_cache, shutdown_cache
+from .cache import initialize_cache, shutdown_cache
 from .routers import scraping, search, analysis
 
 logging.basicConfig(level=logging.INFO)
