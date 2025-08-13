@@ -24,7 +24,16 @@ docker compose up --build
 **Note**: GPU passthrough is required for wayvnc to start. Currently configured for NVIDIA GPUs.
 
 - API: <http://localhost:8000>
-- VNC Debug: <http://localhost:5910> (wayvnc/wayvnc)
+- VNC Debug: <http://localhost:5910> (wayvnc/wayvnc) - Use a VNC client (e.g., RealVNC)
+
+#### Chrome Version Management
+
+The Docker container uses a pinned Chrome version for reproducible browser behavior. To update to the latest stable Chrome version:
+
+```bash
+./update-chrome-version.sh  # Updates chrome-version.txt
+docker compose build        # Rebuild with new Chrome version
+```
 
 ### Local Development
 
