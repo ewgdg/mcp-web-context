@@ -1,0 +1,25 @@
+[project]
+name = "mcp-web-search"
+version = "0.1.0"
+description = "MCP server for web browsing, content extraction, and search"
+requires-python = ">=3.13"
+dependencies = [
+    "zendriver",
+    "beautifulsoup4",
+    "fastapi",
+    "pydantic",
+    "uvicorn[standard]",
+    "lxml",
+    "aiosqlite",
+    "apscheduler",
+    "sqlalchemy[asyncio]",
+    "aiohttp",
+    "mcp",
+    "markdownify",
+    "langchain",
+    "langchain-openai"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

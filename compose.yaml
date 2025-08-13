@@ -1,0 +1,59 @@
+services:
+  mcp-web-search:
+    build:
+      context: .
+      args:
+        WAYVNC_UNSUPPORTED_GPU: "true"
+        ENABLE_XWAYLAND: "false"
+          
+    ports:
+      - "8000:8000"
+      - "5910:5910"
+    restart: unless-stopped
+    pull_policy: build
+    volumes:
+      - swayvnc-wayvnc-certs:/certs
+      - cache:/app/cache
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - RENDER_GROUP_GID= # replace with GID of the group which owns the /dev/dri/renderD128 device
+      - SWAY_RESOLUTION=1920x1080
+      - WAYVNC_PORT=5910
+      - WAYVNC_ENABLE_AUTH=true
+      - WAYVNC_USERNAME=wayvnc
+      - WAYVNC_PASSWORD=wayvnc
+      # change the docker user id to current user id
+      # - PUID=${UID:?}
+      # - PGID=${GID:?}
+      # nvidia
+      - GBM_BACKEND=nvidia-drm 
+      - __GLX_VENDOR_LIBRARY_NAME=nvidia
+
+    # privileged: true
+    # cap_add:
+    #   - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    # This is needed for any modern website to function like youtube.
+    shm_size: "10gb"
+    command: uv run -- uvicorn 'scraper.main:app' --host=0.0.0.0 --port=8000
+    # command: sleep infinity
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "2"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all # Number of GPUs to allocate, or `all`
+              # device_ids: ['0']
+              capabilities: [ gpu, compute, utility, video, display ]
+
+volumes:
+  swayvnc-wayvnc-certs:
+  cache:
