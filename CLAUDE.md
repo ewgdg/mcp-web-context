@@ -18,13 +18,13 @@ The service runs in a Docker container with Wayland-based VNC for browser visual
 - Uses `uv` for Python package management
 - Python 3.13+ required
 - Install dependencies: `uv sync`
-- Run the service locally: `uv run -- uvicorn 'src.scraper.main:app' --host=0.0.0.0 --port=8000`
+- Run the service locally: `uv run -- uvicorn 'src.mcp_web_context.main:app' --host=0.0.0.0 --port=8000`
 
 ### Code Quality and Testing
 
 - Run browser test: `uv run test/test_browser.py`
 - Test API endpoints: Visit `http://localhost:8000/docs` for interactive OpenAPI documentation
-- **Note**: Some scripts reference `app` directory but code is in `src/scraper/` - this needs to be fixed
+- **Note**: Some scripts reference `app` directory but code is in `src/mcp_web_context/` - this needs to be fixed
 
 ### Docker Development
 
@@ -119,9 +119,9 @@ This service implements the Model Context Protocol (MCP) and can be used as an M
 
 The codebase follows a modular FastAPI structure:
 
-- `src/main.py` - FastAPI app with MCP integration via FastMCP
-- `src/routers/` - API route handlers (scraping, search, analysis)
-- `src/scraper.py` - Browser pool management with Zendriver
-- `src/search.py` - Google Custom Search integration
-- `src/cache.py` - SQLite caching with async support
-- `src/agents/` - AI-powered content analysis agents
+- `src/mcp_web_context/main.py` - FastAPI app with MCP integration via FastMCP
+- `src/mcp_web_context/routers/` - API route handlers (scraping, search, analysis)
+- `src/mcp_web_context/scraper.py` - Browser pool management with Zendriver
+- `src/mcp_web_context/search.py` - Google Custom Search integration
+- `src/mcp_web_context/cache.py` - SQLite caching with async support
+- `src/mcp_web_context/agents/` - AI-powered content analysis agents

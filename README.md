@@ -1,4 +1,4 @@
-# MCP Web Search
+# MCP Web Context
 
 A Model Context Protocol (MCP) server for web browsing, content extraction, and search built with FastAPI.
 
@@ -16,7 +16,7 @@ A Model Context Protocol (MCP) server for web browsing, content extraction, and 
 
 ```bash
 git clone <repository-url>
-cd mcp-web-search
+cd mcp-web-context
 cp .env.example .env  # Edit with your API keys
 docker compose up --build
 ```
@@ -40,7 +40,7 @@ docker compose build        # Rebuild with new Chrome version
 ```bash
 uv sync
 cp .env.example .env  # Edit with your API keys
-uv run -- uvicorn 'src.mcp_web_search.main:app' --host=0.0.0.0 --port=8000
+uv run -- uvicorn 'src.mcp_web_context.main:app' --host=0.0.0.0 --port=8000
 ```
 
 ## Configuration
