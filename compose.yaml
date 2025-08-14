@@ -2,14 +2,11 @@ services:
   mcp-web-search:
     build:
       context: .
-      args:
-        WAYVNC_UNSUPPORTED_GPU: "true"
-        ENABLE_XWAYLAND: "false"
           
     ports:
       - "8000:8000"
       - "5910:5910"
-    restart: unless-stopped
+    # restart: unless-stopped
     pull_policy: build
     volumes:
       - swayvnc-wayvnc-certs:/certs
@@ -38,7 +35,7 @@ services:
       - seccomp:unconfined
     # This is needed for any modern website to function like youtube.
     shm_size: "10gb"
-    command: uv run -- uvicorn 'mcp_web_context.main:app' --host=0.0.0.0 --port=8000
+    # command: ["uvicorn", "src.mcp_web_context.main:app", "--host=0.0.0.0", "--port=8000"]
     # command: sleep infinity
     logging:
       driver: json-file

@@ -9,6 +9,9 @@ from bs4 import BeautifulSoup
 from typing import Any, Dict, cast, Tuple
 import asyncio
 import logging
+import json
+from camoufox import AsyncCamoufox
+from playwright.async_api import Page
 
 from .utils import (
     get_relevant_images,
@@ -19,12 +22,12 @@ from .utils import (
 )
 
 
-class NoDriverScraper:
+class CamoufoxScraper:
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
     max_browsers = 3
     browser_load_threshold = 5
-    browsers: set["NoDriverScraper.Browser"] = set()
+    browsers: set["CamoufoxScraper.Browser"] = set()
     browsers_lock = asyncio.Lock()
 
     @staticmethod
@@ -43,11 +46,9 @@ class NoDriverScraper:
         return url
 
     class Browser:
-        def __init__(
-            self,
-            driver: "zendriver.Browser",
-        ):
-            self.driver = driver
+        def __init__(self, config: dict, headless: bool = False):
+            self.config = config
+            self.headless = headless
             self.processing_count = 0
             self.has_blank_page = True
             self.allowed_requests_times = {}
@@ -55,42 +56,53 @@ class NoDriverScraper:
             self.tab_mode = True
             self.max_scroll_percent = 500
             self.stopping = False
+            self.browser_context = None
 
-        async def get(self, url: str) -> "zendriver.Tab":
+        async def _ensure_browser(self):
+            """Ensure browser context is initialized"""
+            if self.browser_context is None:
+                self.browser_context = AsyncCamoufox(
+                    config=self.config, headless=self.headless, geoip=True
+                )
+                # Manually enter the context
+                self.browser = await self.browser_context.__aenter__()
+
+        async def get(self, url: str) -> Page:
             self.processing_count += 1
             try:
                 async with self.rate_limit_for_domain(url):
-                    new_window = not self.has_blank_page
+                    await self._ensure_browser()
+                    page = await self.browser.new_page()
+                    await page.goto(url)
                     self.has_blank_page = False
-                    if self.tab_mode:
-                        return await self.driver.get(url, new_tab=new_window)
-                    else:
-                        return await self.driver.get(url, new_window=new_window)
+                    return page
             except Exception:
                 self.processing_count -= 1
                 raise
 
-        async def scroll_page_to_bottom(self, page: "zendriver.Tab"):
+        async def scroll_page_to_bottom(self, page):
             total_scroll_percent = 0
             
             while True:
                 try:
-                    # in tab mode, we need to bring the tab to front before scrolling to load the page content properly
-                    if self.tab_mode:
-                        await page.bring_to_front()
                     scroll_percent = random.randint(46, 97)
                     total_scroll_percent += scroll_percent
-                    speed = random.randint(1600, 2800)
+
+                    # Scroll down using evaluate
                     await asyncio.wait_for(
-                        page.scroll_down(amount=scroll_percent, speed=speed), timeout=5
+                        page.evaluate(
+                            f"window.scrollBy(0, window.innerHeight * {scroll_percent / 100})"
+                        ),
+                        timeout=5,
                     )
-                    await self.wait_or_timeout(page, "idle", 2)
-                    await page.sleep(random.uniform(0.23, 0.56))
+
+                    await asyncio.sleep(random.uniform(0.23, 0.56))
+                    await self.wait_or_timeout(page, "load", 2)
 
                     if total_scroll_percent >= self.max_scroll_percent:
                         break
 
-                    # Add timeout to page.evaluate to prevent hanging
+                    # Check if at bottom
                     at_bottom = await asyncio.wait_for(
                         page.evaluate(
                             "window.innerHeight + window.scrollY >= document.scrollingElement.scrollHeight"
@@ -100,38 +112,40 @@ class NoDriverScraper:
                     if cast(bool, at_bottom):
                         break
                 except asyncio.TimeoutError:
-                    NoDriverScraper.logger.warning(
+                    CamoufoxScraper.logger.warning(
                         "Scrolling timed out, assuming at bottom"
                     )
                     break
                 except Exception as e:
-                    NoDriverScraper.logger.warning(f"Error during scrolling: {e}")
+                    CamoufoxScraper.logger.warning(f"Error during scrolling: {e}")
                     break
 
         async def wait_or_timeout(
             self,
-            page: "zendriver.Tab",
-            until: Literal["complete", "idle"] = "idle",
+            page,
+            until: Literal["complete", "load", "networkidle"] = "load",
             timeout: float = 3,
         ):
             try:
-                if until == "idle":
-                    await asyncio.wait_for(page.wait(), timeout)
-                else:
-                    await page.wait_for_ready_state(until, timeout=math.ceil(timeout))
+                await asyncio.wait_for(
+                    page.wait_for_load_state(until, timeout=timeout * 1000), timeout
+                )
             except asyncio.TimeoutError:
-                NoDriverScraper.logger.warning(
+                CamoufoxScraper.logger.warning(
                     f"timeout waiting for {until} after {timeout} seconds"
                 )
 
-        async def close_page(self, page: "zendriver.Tab"):
+        async def close_page(self, page):
             try:
-                await asyncio.wait_for(page.close(), timeout=10.0)
+                if page:
+                    await asyncio.wait_for(page.close(), timeout=10.0)
             except asyncio.TimeoutError:
-                NoDriverScraper.logger.error("Page close timed out after 10 seconds")
+                CamoufoxScraper.logger.error("Page close timed out after 10 seconds")
             except Exception as e:
-                NoDriverScraper.logger.error(f"Failed to close page: {type(e).__name__}: {str(e)}")
-                NoDriverScraper.logger.debug(f"Close page exception details: {repr(e)}")
+                CamoufoxScraper.logger.error(
+                    f"Failed to close page: {type(e).__name__}: {str(e)}"
+                )
+                CamoufoxScraper.logger.debug(f"Close page exception details: {repr(e)}")
             finally:
                 self.processing_count -= 1
 
@@ -139,7 +153,7 @@ class NoDriverScraper:
         async def rate_limit_for_domain(self, url: str):
             semaphore = None
             try:
-                domain = NoDriverScraper.get_domain(url)
+                domain = CamoufoxScraper.get_domain(url)
 
                 semaphore = self.domain_semaphores.get(domain)
                 if not semaphore:
@@ -154,7 +168,7 @@ class NoDriverScraper:
 
             except Exception as e:
                 # Log error but don't block the request
-                NoDriverScraper.logger.warning(
+                CamoufoxScraper.logger.warning(
                     f"Rate limiting error for {url}: {str(e)}"
                 )
 
@@ -163,16 +177,16 @@ class NoDriverScraper:
                 return
             self.stopping = True
             try:
-                await asyncio.wait_for(self.driver.stop(), timeout=10.0)
-            except asyncio.TimeoutError:
-                NoDriverScraper.logger.error("Browser stop timed out after 10 seconds")
+                if self.browser_context is not None:
+                    # Manually exit the context
+                    await self.browser_context.__aexit__(None, None, None)
+                    self.browser_context = None
+                    self.browser = None
             except Exception as e:
-                NoDriverScraper.logger.error(f"Failed to stop browser: {e}")
+                CamoufoxScraper.logger.error(f"Failed to stop browser: {e}")
 
     @classmethod
-    async def _cleanup_async(
-        cls, page: "zendriver.Tab | None", browser: "NoDriverScraper.Browser | None"
-    ):
+    async def _cleanup_async(cls, page, browser: "CamoufoxScraper.Browser | None"):
         try:
             if page and browser:
                 await browser.close_page(page)
@@ -182,31 +196,22 @@ class NoDriverScraper:
             cls.logger.error(f"Cleanup failed: {e}")
 
     @classmethod
-    async def get_browser(cls, headless: bool = False) -> "NoDriverScraper.Browser":
+    async def get_browser(cls, headless: bool = False) -> "CamoufoxScraper.Browser":
         async def create_browser():
             try:
-                global zendriver
-                import zendriver
+                from camoufox import AsyncCamoufox
             except ImportError:
                 raise ImportError(
-                    "The zendriver package is required to use NoDriverScraper. "
-                    "Please install it with: pip install zendriver"
+                    "The camoufox package is required to use CamoufoxScraper. "
+                    "Please install it with: pip install camoufox[geoip]"
                 )
 
-            config = zendriver.Config(
-                headless=headless,
-                browser_connection_timeout=0.5,
-                # required to run in wayland vnc
-                browser_args=[
-                    # use wayland for rendering instead of default X11 backend
-                    "--ozone-platform-hint=wayland",
-                    # "--ignore-gpu-blocklist",
-                ],
-            )
-            driver = await zendriver.start(config)
-            browser = cls.Browser(driver)
-            cls.browsers.add(browser)
-            return browser
+            # Use minimal config and let Camoufox handle device fingerprinting
+            config = {}  # Empty config - let Camoufox auto-generate everything
+
+            browser_wrapper = cls.Browser(config, headless)
+            cls.browsers.add(browser_wrapper)
+            return browser_wrapper
 
         async with cls.browsers_lock:
             if len(cls.browsers) == 0:
@@ -232,12 +237,12 @@ class NoDriverScraper:
                 try:
                     await browser.stop()
                 except Exception as e:
-                    NoDriverScraper.logger.error(f"Failed to release browser: {e}")
+                    CamoufoxScraper.logger.error(f"Failed to release browser: {e}")
                 finally:
                     cls.browsers.discard(browser)
 
     def __init__(self, url: str, session: Any | None = None):
-        self.url = NoDriverScraper.normalize_url(url)
+        self.url = CamoufoxScraper.normalize_url(url)
         self.session = session
         self.debug = True
 
@@ -254,7 +259,7 @@ class NoDriverScraper:
             )
 
         for attempt in range(max_retries + 1):
-            browser: NoDriverScraper.Browser | None = None
+            browser: CamoufoxScraper.Browser | None = None
             page = None
             try:
                 try:
@@ -269,14 +274,14 @@ class NoDriverScraper:
                         f"Failed to open page for {self.url}: page is None"
                     )
                     return f"Failed to open page for {self.url}: page is None", [], ""
-                await browser.wait_or_timeout(page, "complete", 2)
+                await browser.wait_or_timeout(page, "load", 2)
                 # wait for potential redirection
-                await page.sleep(random.uniform(0.3, 0.7))
-                await browser.wait_or_timeout(page, "idle", 2)
+                await asyncio.sleep(random.uniform(0.3, 0.7))
+                await browser.wait_or_timeout(page, "networkidle", 2)
 
                 await browser.scroll_page_to_bottom(page)
                 try:
-                    html = await asyncio.wait_for(page.get_content(), timeout=10.0)
+                    html = await asyncio.wait_for(page.content(), timeout=10.0)
                 except asyncio.TimeoutError:
                     self.logger.error(
                         f"Timeout getting content for {self.url} after 10 seconds"
@@ -318,11 +323,11 @@ class NoDriverScraper:
                         screenshot_dir.mkdir(exist_ok=True)
                         screenshot_path = (
                             screenshot_dir
-                            / f"screenshot-error-{NoDriverScraper.get_domain(self.url)}.jpeg"
+                            / f"screenshot-error-{CamoufoxScraper.get_domain(self.url)}.png"
                         )
                         try:
                             await asyncio.wait_for(
-                                page.save_screenshot(screenshot_path), timeout=5.0
+                                page.screenshot(path=screenshot_path), timeout=5.0
                             )
                         except asyncio.TimeoutError:
                             self.logger.warning(

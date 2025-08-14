@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from mcp.server.fastmcp import FastMCP
 
 from ..cache import async_cache_result
-from ..scraper import NoDriverScraper
+from ..scraper import CamoufoxScraper
 
 router = APIRouter(prefix="/scrape", tags=["scraping"])
 
@@ -62,7 +62,7 @@ async def _scrape(
     url: str, output_format: Literal["text", "markdown", "html"] = "markdown"
 ) -> ScrapeResult:
     async with scrape_semaphore:
-        scraper = NoDriverScraper(url)
+        scraper = CamoufoxScraper(url)
         content, images, title = await scraper.scrape_async(output_format=output_format)
         return ScrapeResult(
             content=content,

@@ -1,63 +1,51 @@
 import asyncio
 import os
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any
+from playwright.async_api import Page
 
-import zendriver as zd
+# Add the src directory to the path so we can import the scraper
+if not __package__:
+    sys.path.append(str(Path(__file__).parent.parent / "src"))
+
+from mcp_web_context.scraper import CamoufoxScraper
 
 
 async def main() -> None:
-    async def start_browser() -> zd.Browser:
-        config = zd.Config(
-            browser_connection_timeout=1,
-            browser_args=[
-                # use wayland for rendering instead of default X11 backend
-                "--ozone-platform-hint=wayland",
-                # force enable hardware acceleration
-                # "--ignore-gpu-blocklist",
-            ],
-        )
-        browser = await zd.start(config)
-        return browser
+    async def get_browserscan_bot_detection_results(page: Page) -> str:
+        try:
+            # Wait for the results to load
+            await page.wait_for_selector("text=Test Results:", timeout=10000)
+            await asyncio.sleep(1)
+            # Get the result text - this is simplified as Playwright API is different
+            result_element = await page.query_selector("text=Test Results:")
+            if result_element:
+                # Prefer the element's own textContent. If empty, try the parent's last child.
+                # Use evaluate to access parentElement/lastElementChild in a single DOM call.
+                text = await result_element.evaluate(
+                    "el => {"
+                    "  const p = el.parentElement;"
+                    "  if (!p) return null;"
+                    "  const last = p.lastElementChild;"
+                    "  return last && last.textContent ? last.textContent.trim() : null;"
+                    "}"
+                )
+                return text or "Unknown"
+            return "Results not found"
+        except Exception as e:
+            print(f"Error getting results: {e}")
+            return "Error getting results"
 
-    async def get_browserscan_bot_detection_results(page: zd.Tab) -> str:
-        await page
-        await page.wait(1)
-        element = await page.find_element_by_text("Test Results:")
-        if (
-            element is None
-            or element.parent is None
-            or not isinstance(element.parent.children[-1], zd.Element)
-        ):
-            return "element not found"
-        return element.parent.children[-1].text
-
-    print(f"Zendriver Docker demo (zendriver {zd.__version__})")
-    chrome_version = " ".join(
-        (
-            subprocess.run(
-                ["google-chrome-stable", "--version"], stdout=subprocess.PIPE
-            )
-            .stdout.decode("utf-8")
-            .split(" ")[:3]
-        )
-    )
-    print(
-        f"{chrome_version} {os.uname().machine} ({os.uname().sysname} {
-            os.uname().release
-        }\n {
-            subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE).stdout.decode(
-                'utf-8'
-            )
-        }"
-    )
+    print("Camoufox Docker demo")
 
     print("Starting browser...")
-    browser = await start_browser()
+    browser_wrapper = await CamoufoxScraper.get_browser(headless=False)
     print("Browser successfully started!")
 
     print("Visiting https://www.browserscan.net/bot-detection")
-    page = await browser.get("https://www.browserscan.net/bot-detection")
+    page = await browser_wrapper.get("https://www.browserscan.net/bot-detection")
 
     print("Getting test results...\n")
     result = await get_browserscan_bot_detection_results(page)
@@ -68,7 +56,7 @@ async def main() -> None:
             f"Test failed! ({result=}) Check browser window with VNC viewer to see what happened."
         )
 
-    await page.save_screenshot("./user_data/screenshot.png")
+    await page.screenshot(path="./logs/screenshot.png")
 
     print(
         (
@@ -79,7 +67,14 @@ async def main() -> None:
             "When you are done, press Ctrl+C to exit the demo."
         )
     )
-    await asyncio.Future()  # wait forever
+
+    try:
+        await asyncio.Future()  # wait forever
+    finally:
+        # Close the page before releasing the browser
+        if page:
+            await page.close()
+        await CamoufoxScraper.release_browser(browser_wrapper)
 
 
 if __name__ == "__main__":

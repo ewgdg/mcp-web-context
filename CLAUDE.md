@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an MCP (Model Context Protocol) server for web browsing and search built with FastAPI that provides two main capabilities:
 
-- Web page content extraction using headless browser automation (Zendriver)
+- Web page content extraction using headless browser automation (Camoufox)
 - Google Custom Search API integration
 
 The service runs in a Docker container with Wayland-based VNC for browser visualization and debugging.
@@ -46,7 +46,7 @@ The service runs in a Docker container with Wayland-based VNC for browser visual
 
 **Browser Management (`scraper.py`)**:
 
-- `NoDriverScraper` class manages Zendriver browser instances
+- `CamoufoxScraper` class manages Camoufox browser instances
 - Load balancing across max 3 browser instances (5 tabs/browser threshold)
 - Per-domain rate limiting with random delays
 - Automatic screenshot capture on scraping failures for debugging
@@ -87,18 +87,12 @@ Optional:
 
 ### Browser Configuration
 
-The service uses Zendriver (Chrome/Chromium) with special configuration for containerized environments:
+The service uses Camoufox (Firefox-based) with special configuration for containerized environments:
 
 - Wayland support for VNC rendering
-- GPU acceleration flags (`--ignore-gpu-blocklist`)
-- Large shared memory (`10gb`) for modern websites
-- Chrome version pinned via `chrome-version.txt` file
-
-### Chrome Version Management
-
-- Chrome version is pinned to a specific version defined in `chrome-version.txt`
-- Update to latest stable Chrome: `./update-chrome-version.sh`
-- Rebuild Docker image after version update: `docker compose build`
+- Anti-fingerprinting and stealth features built-in
+- Automatic user agent and fingerprint spoofing
+- Firefox ESR as the base browser engine
 
 ## Testing and Debugging
 
@@ -121,7 +115,7 @@ The codebase follows a modular FastAPI structure:
 
 - `src/mcp_web_context/main.py` - FastAPI app with MCP integration via FastMCP
 - `src/mcp_web_context/routers/` - API route handlers (scraping, search, analysis)
-- `src/mcp_web_context/scraper.py` - Browser pool management with Zendriver
+- `src/mcp_web_context/scraper.py` - Browser pool management with Camoufox
 - `src/mcp_web_context/search.py` - Google Custom Search integration
 - `src/mcp_web_context/cache.py` - SQLite caching with async support
 - `src/mcp_web_context/agents/` - AI-powered content analysis agents
