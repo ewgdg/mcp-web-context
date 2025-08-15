@@ -6,12 +6,11 @@ import traceback
 from typing_extensions import Literal
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
-from typing import Any, Dict, cast, Tuple
+from typing import Any, Dict, cast, Tuple, Optional, AsyncGenerator, Set
 import asyncio
 import logging
 import json
-from camoufox import AsyncCamoufox
-from playwright.async_api import Page
+from patchright.async_api import Browser, BrowserContext, Page
 
 from .utils import (
     get_relevant_images,
@@ -22,13 +21,15 @@ from .utils import (
 )
 
 
-class CamoufoxScraper:
+class Scraper:
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
-    max_browsers = 3
-    browser_load_threshold = 5
-    browsers: set["CamoufoxScraper.Browser"] = set()
-    browsers_lock = asyncio.Lock()
+    max_browsers: int = 3
+    browser_load_threshold: int = 5
+    contexts: Set["Scraper.Context"] = set()
+    contexts_lock: asyncio.Lock = asyncio.Lock()
+    _shared_driver: Optional[Any] = None
+    _shared_browser: Optional[Browser] = None
 
     @staticmethod
     def get_domain(url: str) -> str:
@@ -39,40 +40,33 @@ class CamoufoxScraper:
         return domain
 
     @staticmethod
-    def normalize_url(url):
+    def normalize_url(url: str) -> str:
         parsed = urlparse(url)
         if not parsed.scheme:
             return "https://" + url
         return url
 
-    class Browser:
-        def __init__(self, config: dict, headless: bool = False):
-            self.config = config
-            self.headless = headless
-            self.processing_count = 0
-            self.has_blank_page = True
-            self.allowed_requests_times = {}
+    class Context:
+        def __init__(self, context: BrowserContext) -> None:
+            self.context: BrowserContext = context
+            self.processing_count: int = 0
+            self.has_blank_page: bool = True
+            self.allowed_requests_times: Dict[str, float] = {}
             self.domain_semaphores: Dict[str, asyncio.Semaphore] = {}
-            self.tab_mode = True
-            self.max_scroll_percent = 500
-            self.stopping = False
-            self.browser_context = None
+            self.tab_mode: bool = True
+            self.max_scroll_percent: int = 500
+            self.stopping: bool = False
 
-        async def _ensure_browser(self):
-            """Ensure browser context is initialized"""
-            if self.browser_context is None:
-                self.browser_context = AsyncCamoufox(
-                    config=self.config, headless=self.headless, geoip=True
-                )
-                # Manually enter the context
-                self.browser = await self.browser_context.__aenter__()
+        async def _ensure_browser(self) -> None:
+            """Browser context is already initialized in constructor"""
+            pass
 
         async def get(self, url: str) -> Page:
             self.processing_count += 1
             try:
                 async with self.rate_limit_for_domain(url):
                     await self._ensure_browser()
-                    page = await self.browser.new_page()
+                    page = await self.context.new_page()
                     await page.goto(url)
                     self.has_blank_page = False
                     return page
@@ -80,19 +74,28 @@ class CamoufoxScraper:
                 self.processing_count -= 1
                 raise
 
-        async def scroll_page_to_bottom(self, page):
+        async def scroll_page_to_bottom(self, page: Page) -> None:
             total_scroll_percent = 0
             
             while True:
                 try:
+                    # Bring page to front before each scroll operation
+                    await page.bring_to_front()
+
                     scroll_percent = random.randint(46, 97)
                     total_scroll_percent += scroll_percent
 
-                    # Scroll down using evaluate
+                    # Get viewport height for natural scrolling
+                    viewport = page.viewport_size
+                    if not viewport:
+                        # Fallback to default viewport size
+                        scroll_distance = int(800 * scroll_percent / 100)
+                    else:
+                        scroll_distance = int(viewport["height"] * scroll_percent / 100)
+
+                    # Use native mouse wheel scrolling (less detectable)
                     await asyncio.wait_for(
-                        page.evaluate(
-                            f"window.scrollBy(0, window.innerHeight * {scroll_percent / 100})"
-                        ),
+                        page.mouse.wheel(0, scroll_distance),
                         timeout=5,
                     )
 
@@ -112,48 +115,46 @@ class CamoufoxScraper:
                     if cast(bool, at_bottom):
                         break
                 except asyncio.TimeoutError:
-                    CamoufoxScraper.logger.warning(
-                        "Scrolling timed out, assuming at bottom"
-                    )
+                    Scraper.logger.warning("Scrolling timed out, assuming at bottom")
                     break
                 except Exception as e:
-                    CamoufoxScraper.logger.warning(f"Error during scrolling: {e}")
+                    Scraper.logger.warning(f"Error during scrolling: {e}")
                     break
 
         async def wait_or_timeout(
             self,
-            page,
-            until: Literal["complete", "load", "networkidle"] = "load",
+            page: Page,
+            until: Literal["domcontentloaded", "load", "networkidle"] = "load",
             timeout: float = 3,
-        ):
+        ) -> None:
             try:
                 await asyncio.wait_for(
                     page.wait_for_load_state(until, timeout=timeout * 1000), timeout
                 )
             except asyncio.TimeoutError:
-                CamoufoxScraper.logger.warning(
+                Scraper.logger.warning(
                     f"timeout waiting for {until} after {timeout} seconds"
                 )
 
-        async def close_page(self, page):
+        async def close_page(self, page: Page) -> None:
             try:
                 if page:
                     await asyncio.wait_for(page.close(), timeout=10.0)
             except asyncio.TimeoutError:
-                CamoufoxScraper.logger.error("Page close timed out after 10 seconds")
+                Scraper.logger.error("Page close timed out after 10 seconds")
             except Exception as e:
-                CamoufoxScraper.logger.error(
+                Scraper.logger.error(
                     f"Failed to close page: {type(e).__name__}: {str(e)}"
                 )
-                CamoufoxScraper.logger.debug(f"Close page exception details: {repr(e)}")
+                Scraper.logger.debug(f"Close page exception details: {repr(e)}")
             finally:
                 self.processing_count -= 1
 
         @asynccontextmanager
-        async def rate_limit_for_domain(self, url: str):
-            semaphore = None
+        async def rate_limit_for_domain(self, url: str) -> AsyncGenerator[None, None]:
+            semaphore: Optional[asyncio.Semaphore] = None
             try:
-                domain = CamoufoxScraper.get_domain(url)
+                domain = Scraper.get_domain(url)
 
                 semaphore = self.domain_semaphores.get(domain)
                 if not semaphore:
@@ -168,83 +169,97 @@ class CamoufoxScraper:
 
             except Exception as e:
                 # Log error but don't block the request
-                CamoufoxScraper.logger.warning(
-                    f"Rate limiting error for {url}: {str(e)}"
-                )
+                Scraper.logger.warning(f"Rate limiting error for {url}: {str(e)}")
 
-        async def stop(self):
+        async def stop(self) -> None:
             if self.stopping:
                 return
             self.stopping = True
             try:
-                if self.browser_context is not None:
-                    # Manually exit the context
-                    await self.browser_context.__aexit__(None, None, None)
-                    self.browser_context = None
-                    self.browser = None
+                if self.context:
+                    await self.context.close()
+                # self.context = None
             except Exception as e:
-                CamoufoxScraper.logger.error(f"Failed to stop browser: {e}")
+                Scraper.logger.error(f"Failed to stop context: {e}")
 
     @classmethod
-    async def _cleanup_async(cls, page, browser: "CamoufoxScraper.Browser | None"):
+    async def _cleanup_async(
+        cls, page: Optional[Page], context_wrapper: Optional["Scraper.Context"]
+    ) -> None:
         try:
-            if page and browser:
-                await browser.close_page(page)
-            if browser:
-                await cls.release_browser(browser)
+            if page and context_wrapper:
+                await context_wrapper.close_page(page)
+            if context_wrapper:
+                await cls.release_context(context_wrapper)
         except Exception as e:
             cls.logger.error(f"Cleanup failed: {e}")
 
     @classmethod
-    async def get_browser(cls, headless: bool = False) -> "CamoufoxScraper.Browser":
-        async def create_browser():
+    async def _ensure_shared_browser(cls, headless: bool = False) -> None:
+        """Ensure we have a shared browser instance"""
+        if cls._shared_driver is None:
             try:
-                from camoufox import AsyncCamoufox
+                from patchright.async_api import async_playwright
             except ImportError:
                 raise ImportError(
-                    "The camoufox package is required to use CamoufoxScraper. "
-                    "Please install it with: pip install camoufox[geoip]"
+                    "The patchright package is required to use Scraper. "
+                    "Please install it with: pip install patchright"
                 )
 
-            # Use minimal config and let Camoufox handle device fingerprinting
-            config = {}  # Empty config - let Camoufox auto-generate everything
+            cls._shared_driver = await async_playwright().start()
+            cls._shared_browser = await cls._shared_driver.chromium.launch(
+                headless=headless,
+                channel="chrome",  # Use real Chrome for better stealth
+                args=["--ozone-platform-hint=wayland"]
+            )
 
-            browser_wrapper = cls.Browser(config, headless)
-            cls.browsers.add(browser_wrapper)
-            return browser_wrapper
-
-        async with cls.browsers_lock:
-            if len(cls.browsers) == 0:
-                # No browsers available, create new one
-                return await create_browser()
-
-            # Load balancing: Get browser with lowest number of tabs
-            browser = min(cls.browsers, key=lambda b: b.processing_count)
-
-            # If all browsers are heavily loaded and we can create more
-            if (
-                browser.processing_count >= cls.browser_load_threshold
-                and len(cls.browsers) < cls.max_browsers
-            ):
-                return await create_browser()
-
-            return browser
+        # Ensure _shared_browser is not None after initialization
+        assert cls._shared_browser is not None, "Browser initialization failed"
 
     @classmethod
-    async def release_browser(cls, browser: Browser):
-        async with cls.browsers_lock:
-            if browser and browser.processing_count <= 0:
-                try:
-                    await browser.stop()
-                except Exception as e:
-                    CamoufoxScraper.logger.error(f"Failed to release browser: {e}")
-                finally:
-                    cls.browsers.discard(browser)
+    async def get_context(cls, headless: bool = False) -> "Scraper.Context":
+        async def create_context() -> "Scraper.Context":
+            await cls._ensure_shared_browser(headless)
+            browser = cast(Browser, cls._shared_browser)  # Tell IDE this is not None
+            context = await browser.new_context(
+                no_viewport=True,  # Recommended for stealth
+            )
+            context_wrapper = cls.Context(context)
+            cls.contexts.add(context_wrapper)
+            return context_wrapper
 
-    def __init__(self, url: str, session: Any | None = None):
-        self.url = CamoufoxScraper.normalize_url(url)
+        async with cls.contexts_lock:
+            if len(cls.contexts) == 0:
+                # No contexts available, create new one
+                return await create_context()
+
+            # Load balancing: Get context with lowest number of tabs
+            context_wrapper = min(cls.contexts, key=lambda c: c.processing_count)
+
+            # If all contexts are heavily loaded and we can create more
+            if (
+                context_wrapper.processing_count >= cls.browser_load_threshold
+                and len(cls.contexts) < cls.max_browsers
+            ):
+                return await create_context()
+
+            return context_wrapper
+
+    @classmethod
+    async def release_context(cls, context_wrapper: "Scraper.Context") -> None:
+        async with cls.contexts_lock:
+            if context_wrapper and context_wrapper.processing_count <= 0:
+                try:
+                    await context_wrapper.stop()
+                except Exception as e:
+                    Scraper.logger.error(f"Failed to release context: {e}")
+                finally:
+                    cls.contexts.discard(context_wrapper)
+
+    def __init__(self, url: str, session: Optional[Any] = None) -> None:
+        self.url = Scraper.normalize_url(url)
         self.session = session
-        self.debug = True
+        self.debug: bool = True
 
     async def scrape_async(
         self,
@@ -259,27 +274,27 @@ class CamoufoxScraper:
             )
 
         for attempt in range(max_retries + 1):
-            browser: CamoufoxScraper.Browser | None = None
-            page = None
+            context_wrapper: Optional["Scraper.Context"] = None
+            page: Optional[Page] = None
             try:
                 try:
-                    browser = await self.get_browser()
+                    context_wrapper = await self.get_context()
                 except ImportError as e:
-                    self.logger.error(f"Failed to initialize browser: {str(e)}")
+                    self.logger.error(f"Failed to initialize context: {str(e)}")
                     return str(e), [], ""
 
-                page = await browser.get(self.url)
+                page = await context_wrapper.get(self.url)
                 if page is None:
                     self.logger.error(
                         f"Failed to open page for {self.url}: page is None"
                     )
                     return f"Failed to open page for {self.url}: page is None", [], ""
-                await browser.wait_or_timeout(page, "load", 2)
+                await context_wrapper.wait_or_timeout(page, "load", 2)
                 # wait for potential redirection
                 await asyncio.sleep(random.uniform(0.3, 0.7))
-                await browser.wait_or_timeout(page, "networkidle", 2)
+                await context_wrapper.wait_or_timeout(page, "networkidle", 2)
 
-                await browser.scroll_page_to_bottom(page)
+                await context_wrapper.scroll_page_to_bottom(page)
                 try:
                     html = await asyncio.wait_for(page.content(), timeout=10.0)
                 except asyncio.TimeoutError:
@@ -323,7 +338,7 @@ class CamoufoxScraper:
                         screenshot_dir.mkdir(exist_ok=True)
                         screenshot_path = (
                             screenshot_dir
-                            / f"screenshot-error-{CamoufoxScraper.get_domain(self.url)}.png"
+                            / f"screenshot-error-{Scraper.get_domain(self.url)}.png"
                         )
                         try:
                             await asyncio.wait_for(
@@ -360,7 +375,7 @@ class CamoufoxScraper:
                     await asyncio.sleep(random.uniform(1.0, 2.0))
             finally:
                 # Fire-and-forget cleanup - don't wait for it
-                asyncio.create_task(self._cleanup_async(page, browser))
+                asyncio.create_task(self._cleanup_async(page, context_wrapper))
 
         # This should never be reached due to the logic above, but added for completeness
         return "Maximum retry attempts exceeded", [], ""

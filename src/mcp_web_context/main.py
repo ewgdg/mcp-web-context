@@ -5,7 +5,7 @@ from mcp.server.fastmcp import FastMCP
 import logging
 
 from .cache import initialize_cache, shutdown_cache
-from .routers import scraping, search, analysis
+from .routers import scraping, search, analysis, logs
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,6 +53,7 @@ def health_check():
 app.include_router(scraping.router)
 app.include_router(search.router)
 app.include_router(analysis.router)
+app.include_router(logs.router)
 
 # Register MCP tools from routers
 scraping.register_mcp_tools(mcp)

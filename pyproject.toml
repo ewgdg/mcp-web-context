@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "MCP server for web browsing, content extraction, and search"
 requires-python = ">=3.13"
 dependencies = [
-    "camoufox[geoip]",
+    "patchright",
     "beautifulsoup4",
     "fastapi",
     "pydantic",
