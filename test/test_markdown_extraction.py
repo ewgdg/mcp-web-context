@@ -23,11 +23,11 @@ from mcp_web_context.utils import (
     get_relevant_images,
     extract_title,
 )
-from mcp_web_context.scraper import CamoufoxScraper
+from mcp_web_context.scraper import Scraper
 
 
 async def fetch_html_with_scraper(url: str) -> str:
-    """Fetch HTML from URL using the CamoufoxScraper with caching to test_data"""
+    """Fetch HTML from URL using the Scraper with caching to test_data"""
     # Create test_data directory if it doesn't exist
     test_data_dir = Path("test_data")
     test_data_dir.mkdir(exist_ok=True, parents=True)
@@ -44,8 +44,8 @@ async def fetch_html_with_scraper(url: str) -> str:
         return html_content
 
     # Fetch HTML using scraper if not cached
-    print(f"Fetching HTML from {url} using CamoufoxScraper")
-    scraper = CamoufoxScraper(url)
+    print(f"Fetching HTML from {url} using Scraper")
+    scraper = Scraper(url)
     html_content, _, _ = await scraper.scrape_async(output_format="html")
 
     # Cache the HTML content

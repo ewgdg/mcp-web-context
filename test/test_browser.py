@@ -4,13 +4,13 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
-from playwright.async_api import Page
+from patchright.async_api import Page
 
 # Add the src directory to the path so we can import the scraper
 if not __package__:
     sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from mcp_web_context.scraper import CamoufoxScraper
+from mcp_web_context.scraper import Scraper
 
 
 async def main() -> None:
@@ -38,14 +38,14 @@ async def main() -> None:
             print(f"Error getting results: {e}")
             return "Error getting results"
 
-    print("Camoufox Docker demo")
+    print("Patchright Docker demo")
 
     print("Starting browser...")
-    browser_wrapper = await CamoufoxScraper.get_browser(headless=False)
+    context_wrapper = await Scraper.get_context(headless=False)
     print("Browser successfully started!")
 
     print("Visiting https://www.browserscan.net/bot-detection")
-    page = await browser_wrapper.get("https://www.browserscan.net/bot-detection")
+    page = await context_wrapper.get("https://www.browserscan.net/bot-detection")
 
     print("Getting test results...\n")
     result = await get_browserscan_bot_detection_results(page)
@@ -56,7 +56,11 @@ async def main() -> None:
             f"Test failed! ({result=}) Check browser window with VNC viewer to see what happened."
         )
 
-    await page.screenshot(path="./logs/screenshot.png")
+    # Ensure logs directory exists and use absolute path
+    logs_dir = Path("./logs")
+    logs_dir.mkdir(exist_ok=True)
+    screenshot_path = logs_dir / "screenshot.png"
+    await page.screenshot(path=str(screenshot_path))
 
     print(
         (
@@ -74,7 +78,7 @@ async def main() -> None:
         # Close the page before releasing the browser
         if page:
             await page.close()
-        await CamoufoxScraper.release_browser(browser_wrapper)
+        await Scraper.release_context(context_wrapper)
 
 
 if __name__ == "__main__":
