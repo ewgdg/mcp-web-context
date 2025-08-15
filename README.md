@@ -51,6 +51,7 @@ Copy `.env.example` to `.env` and add your Google Search API key, Custom Search 
 
 - `GET /health` - Health check
 - `GET /docs` - OpenAPI documentation
+- `GET /logs` - Web-based log file browser with delete functionality
 - `/mcp/sse` - MCP server endpoints (provided by FastMCP)
 
 ## MCP Tools

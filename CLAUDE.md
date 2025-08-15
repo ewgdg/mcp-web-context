@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an MCP (Model Context Protocol) server for web browsing and search built with FastAPI that provides two main capabilities:
 
-- Web page content extraction using headless browser automation (Camoufox)
+- Web page content extraction using headless browser automation (Patchright)
 - Google Custom Search API integration
 
 The service runs in a Docker container with Wayland-based VNC for browser visualization and debugging.
@@ -42,11 +42,12 @@ The service runs in a Docker container with Wayland-based VNC for browser visual
 - `/health` - Health check endpoint
 - `/scrape` - POST endpoint for scraping multiple URLs
 - `/search` - POST endpoint for Google Custom Search
+- `/logs` - GET endpoint for browsing log files with web interface (supports file viewing, right-click deletion, and bulk delete)
 - `/mcp/sse` and `/mcp/messages` - MCP (Model Context Protocol) endpoints
 
 **Browser Management (`scraper.py`)**:
 
-- `CamoufoxScraper` class manages Camoufox browser instances
+- `PatchrightScraper` class manages Patchright browser instances
 - Load balancing across max 3 browser instances (5 tabs/browser threshold)
 - Per-domain rate limiting with random delays
 - Automatic screenshot capture on scraping failures for debugging
@@ -87,7 +88,7 @@ Optional:
 
 ### Browser Configuration
 
-The service uses Camoufox (Firefox-based) with special configuration for containerized environments:
+The service uses Patchright (Firefox-based) with special configuration for containerized environments:
 
 - Wayland support for VNC rendering
 - Anti-fingerprinting and stealth features built-in
@@ -114,8 +115,8 @@ This service implements the Model Context Protocol (MCP) and can be used as an M
 The codebase follows a modular FastAPI structure:
 
 - `src/mcp_web_context/main.py` - FastAPI app with MCP integration via FastMCP
-- `src/mcp_web_context/routers/` - API route handlers (scraping, search, analysis)
-- `src/mcp_web_context/scraper.py` - Browser pool management with Camoufox
+- `src/mcp_web_context/routers/` - API route handlers (scraping, search, analysis, logs)
+- `src/mcp_web_context/scraper.py` - Browser pool management with Patchright
 - `src/mcp_web_context/search.py` - Google Custom Search integration
 - `src/mcp_web_context/cache.py` - SQLite caching with async support
 - `src/mcp_web_context/agents/` - AI-powered content analysis agents

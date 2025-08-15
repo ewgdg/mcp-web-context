@@ -1,24 +1,23 @@
 services:
-  mcp-web-search:
+  mcp-web-context:
     build:
       context: .
           
     ports:
-      - "8000:8000"
+      # - "8000:8000"
       - "5910:5910"
     # restart: unless-stopped
     pull_policy: build
     volumes:
-      - swayvnc-wayvnc-certs:/certs
       - cache:/app/cache
-      - ./logs:/app/logs
+      - logs:/app/logs
     env_file:
       - .env
     environment:
       - RENDER_GROUP_GID= # replace with GID of the group which owns the /dev/dri/renderD128 device
       - SWAY_RESOLUTION=1920x1080
       - WAYVNC_PORT=5910
-      - WAYVNC_ENABLE_AUTH=true
+      - WAYVNC_ENABLE_AUTH=false
       - WAYVNC_USERNAME=wayvnc
       - WAYVNC_PASSWORD=wayvnc
       # change the docker user id to current user id
@@ -36,7 +35,7 @@ services:
     # This is needed for any modern website to function like youtube.
     shm_size: "10gb"
     # command: ["uvicorn", "src.mcp_web_context.main:app", "--host=0.0.0.0", "--port=8000"]
-    # command: sleep infinity
+    command: sleep infinity
     logging:
       driver: json-file
       options:
@@ -52,5 +51,5 @@ services:
               capabilities: [ gpu, compute, utility, video, display ]
 
 volumes:
-  swayvnc-wayvnc-certs:
   cache:
+  logs:
