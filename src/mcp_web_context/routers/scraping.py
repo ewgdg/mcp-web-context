@@ -6,9 +6,9 @@ from mcp.server.fastmcp import FastMCP
 
 from ..cache import async_cache_result
 from ..scraper import Scraper
+from ..services import get_service
 
 router = APIRouter(prefix="/scrape", tags=["scraping"])
-
 
 class ScrapeResult(BaseModel):
     class ImageData(BaseModel):
@@ -59,11 +59,14 @@ scrape_semaphore = asyncio.Semaphore(20)
 
 
 async def _scrape(
-    url: str, output_format: Literal["text", "markdown", "html"] = "markdown"
+    url: str,
+    scraper: Scraper,
+    output_format: Literal["text", "markdown", "html"] = "markdown",
 ) -> ScrapeResult:
     async with scrape_semaphore:
-        scraper = Scraper(url)
-        content, images, title = await scraper.scrape_async(output_format=output_format)
+        content, images, title = await scraper.scrape_async(
+            url, output_format=output_format
+        )
         return ScrapeResult(
             content=content,
             images=[ScrapeResult.ImageData.model_validate(img) for img in images],
@@ -90,10 +93,12 @@ async def fetch_web_content(request: ScrapeRequest) -> ScrapeResponse:
     Uses browser automation to handle JavaScript and dynamic content.
     Supports multiple URLs and returns structured data.
     """
+    scraper = get_service(Scraper)
     scrape_results = await asyncio.gather(
         *(
             _scrape_with_cache(
                 url,
+                scraper,
                 allow_cache=request.allow_cache,
                 output_format=request.output_format,
             )

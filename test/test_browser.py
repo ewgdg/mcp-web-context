@@ -41,11 +41,13 @@ async def main() -> None:
     print("Patchright Docker demo")
 
     print("Starting browser...")
-    context_wrapper = await Scraper.get_context(headless=False)
+    scraper = Scraper()
+    context_wrapper = await scraper.get_context(headless=False)
     print("Browser successfully started!")
 
     print("Visiting https://www.browserscan.net/bot-detection")
-    page = await context_wrapper.get("https://www.browserscan.net/bot-detection")
+    page = await context_wrapper.new_page()
+    await page.goto("https://www.browserscan.net/bot-detection")
 
     print("Getting test results...\n")
     result = await get_browserscan_bot_detection_results(page)
@@ -78,7 +80,7 @@ async def main() -> None:
         # Close the page before releasing the browser
         if page:
             await page.close()
-        await Scraper.release_context(context_wrapper)
+        await scraper.cleanup_on_exit()
 
 
 if __name__ == "__main__":

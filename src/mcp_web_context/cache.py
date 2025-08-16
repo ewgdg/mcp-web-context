@@ -73,10 +73,12 @@ def async_cache_result(
                     {
                         arg_name: arg_serializers[type(arg_val)](arg_val)
                         for arg_name, arg_val in bound.arguments.items()
+                        if type(arg_val) in arg_serializers
                     },
                 )
             )
 
+        @functools.wraps(func)
         async def wrapper(*args, allow_cache=True, **kwargs):
             key = get_key(func, argument_serializers, *args, **kwargs)
 
