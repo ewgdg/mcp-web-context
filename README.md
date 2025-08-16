@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for web browsing, content extraction, and 
 
 ## Features
 
-- **Web Content Extraction**: Headless browser automation using Zendriver
+- **Web Content Extraction**: Headless browser automation using Patchright
 - **Google Custom Search**: Integration with Google Custom Search API  
 - **AI-Powered Analysis**: OpenAI-powered content analysis
 - **Intelligent Caching**: SQLite-based caching with automatic cleanup
@@ -25,15 +25,6 @@ docker compose up --build
 
 - API: <http://localhost:8000>
 - VNC Debug: <http://localhost:5910> (wayvnc/wayvnc) - Use a VNC client (e.g., RealVNC)
-
-#### Chrome Version Management
-
-The Docker container uses a pinned Chrome version for reproducible browser behavior. To update to the latest stable Chrome version:
-
-```bash
-./update-chrome-version.sh  # Updates chrome-version.txt
-docker compose build        # Rebuild with new Chrome version
-```
 
 ### Local Development
 
@@ -67,3 +58,4 @@ Copy `.env.example` to `.env` and add your Google Search API key, Custom Search 
 - NVIDIA GPU (for Docker VNC)
 - Google Custom Search API credentials
 - OpenAI API key
+- Firefox ESR (handled automatically in Docker)
