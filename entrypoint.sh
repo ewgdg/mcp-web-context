@@ -100,10 +100,29 @@ if [ -z "$WAYLAND_DISPLAY" ]; then
     ls -la "$XDG_RUNTIME_DIR" 2>/dev/null || echo "Cannot access $XDG_RUNTIME_DIR"
 fi
 
-# Execute the CMD arguments (use & to run in background so trap stays active)
-echo "Executing command: $@"
-"$@" &
-MAIN_PID=$!
+# Forward signals to command process
+forward_signal() {
+    echo "Received signal, forwarding to command process (PID: $COMMAND_PID)..."
+    if [ -n "$COMMAND_PID" ] && kill -0 "$COMMAND_PID" 2>/dev/null; then
+        kill -TERM "$COMMAND_PID" 2>/dev/null
+        # Wait for graceful shutdown
+        wait "$COMMAND_PID" 2>/dev/null || true
+    fi
+}
 
-# Wait for the main process to complete
-wait $MAIN_PID
+# Set up signal forwarding
+trap forward_signal TERM INT
+
+# Execute the CMD arguments (use & to run in background so trap stays active)
+if [ $# -eq 0 ]; then
+    echo "No command provided, running sleep infinity..."
+    sleep infinity &
+    COMMAND_PID=$!
+else
+    echo "Executing command: $@"
+    "$@" &
+    COMMAND_PID=$!
+fi
+
+# Wait for the command process to complete
+wait $COMMAND_PID
