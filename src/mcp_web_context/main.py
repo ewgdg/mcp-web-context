@@ -1,22 +1,52 @@
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.fastmcp import FastMCP
 import logging
+from logging.handlers import RotatingFileHandler
+import os
 
 from .cache import initialize_cache, shutdown_cache
 from .routers import scraping, search, analysis, logs
+from .scraper import scraper_context_manager, Scraper
+from .services import service_locator
 
-logging.basicConfig(level=logging.INFO)
+os.makedirs("./logs", exist_ok=True)
+
+# Setup rotating file handler for errors only
+error_handler = RotatingFileHandler(
+    "./logs/errors.log",
+    maxBytes=3 * 1024 * 1024,  # 3MB
+    backupCount=3,
+)
+error_handler.setLevel(logging.ERROR)
+error_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
+
+# Setup console handler for all logs including debug
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
+
+# Configure root logger
+logging.basicConfig(level=logging.INFO, handlers=[error_handler, console_handler])
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initialize_cache()
-    try:
+    async with AsyncExitStack() as stack:
+        # Initialize cache
+        await initialize_cache()
+        stack.push_async_callback(shutdown_cache)
+
+        # Initialize scraper
+        scraper = await stack.enter_async_context(scraper_context_manager())
+        service_locator.container.register_singleton(Scraper, scraper)
+
         yield
-    finally:
-        await shutdown_cache()
 
 
 app = FastAPI(
