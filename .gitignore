@@ -9,3 +9,6 @@ htmlcov
 logs/
 test_data/
 browser_data/
+.env
+.env.*
+!.env.example
