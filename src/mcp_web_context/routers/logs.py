@@ -247,18 +247,130 @@ async def browse_logs(request: Request, path: str = ""):
         if mime_type is None:
             mime_type = "application/octet-stream"
         
-        # Display inline for non-binary files (no filename = no download prompt)
-        # Only force download for known binary types
-        binary_types = ('application/octet-stream', 'application/zip', 'application/pdf', 
-                       'application/x-', 'video/', 'audio/')
+        # Check if download is explicitly requested
+        download = request.query_params.get('download') == '1'
         
-        if any(mime_type.startswith(bt) for bt in binary_types):
+        # Define truly binary file types that should always be downloaded
+        download_only_extensions = {'.zip', '.pdf', '.exe', '.bin', '.gz', '.tar', '.bz2', '.xz', 
+                                  '.mp4', '.avi', '.mp3', '.wav', '.woff', '.woff2', '.ttf', '.otf'}
+        download_only_mime_prefixes = ('video/', 'audio/', 'application/zip', 
+                                     'application/x-', 'application/gzip', 'application/pdf')
+        
+        # Check if it's a download-only file
+        is_download_only = (current_path.suffix.lower() in download_only_extensions or 
+                          any(mime_type.startswith(prefix) for prefix in download_only_mime_prefixes))
+        
+        # For images, display with HTML wrapper
+        if mime_type.startswith('image/') and not download:
+            icon = "🖼️"
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>{current_path.name}</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }}
+                    .header {{ background: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+                    .header h1 {{ margin: 0; color: #333; }}
+                    .back-link {{ color: #007bff; text-decoration: none; }}
+                    .back-link:hover {{ text-decoration: underline; }}
+                    .image-container {{ 
+                        background: white; padding: 20px; border-radius: 5px; 
+                        text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    }}
+                    .image-container img {{ 
+                        max-width: 100%; max-height: 80vh; 
+                        border-radius: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    }}
+                    .download-btn {{
+                        background: #28a745; color: white; padding: 8px 16px;
+                        border: none; border-radius: 4px; cursor: pointer;
+                        text-decoration: none; display: inline-block; margin-left: 10px;
+                    }}
+                    .download-btn:hover {{ background: #218838; color: white; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>{icon} {current_path.name}</h1>
+                    <a href="/logs/{current_path.parent.relative_to(LOGS_DIR) if current_path.parent != LOGS_DIR else ''}" class="back-link">← Back to logs</a>
+                    <a href="/logs/{current_path.relative_to(LOGS_DIR)}?download=1" class="download-btn">Download</a>
+                </div>
+                <div class="image-container">
+                    <img src="/logs/{current_path.relative_to(LOGS_DIR)}?download=1" alt="{current_path.name}">
+                </div>
+            </body>
+            </html>
+            """
+            return HTMLResponse(content=html_content)
+        
+        # For text files, try to display with HTML wrapper unless download is requested
+        if not is_download_only and not download:
+            try:
+                with open(current_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                
+                # Get appropriate icon for file type
+                icon = "📄"
+                if current_path.suffix.lower() in {'.log', '.txt'}:
+                    icon = "📄"
+                elif current_path.suffix.lower() in {'.py', '.js', '.ts', '.html', '.css', '.json', '.xml', '.yaml', '.yml'}:
+                    icon = "📝"
+                elif current_path.suffix.lower() in {'.md'}:
+                    icon = "📖"
+                elif current_path.suffix.lower() in {'.csv'}:
+                    icon = "📊"
+                
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>{current_path.name}</title>
+                    <style>
+                        body {{ font-family: 'Courier New', monospace; margin: 20px; background: #f8f9fa; }}
+                        .header {{ background: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+                        .header h1 {{ margin: 0; color: #333; }}
+                        .back-link {{ color: #007bff; text-decoration: none; }}
+                        .back-link:hover {{ text-decoration: underline; }}
+                        .file-content {{ 
+                            background: #1e1e1e; color: #f8f8f2; padding: 20px; 
+                            border-radius: 5px; white-space: pre-wrap; 
+                            font-size: 14px; line-height: 1.4;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                            max-height: 80vh; overflow-y: auto;
+                        }}
+                        .download-btn {{
+                            background: #28a745; color: white; padding: 8px 16px;
+                            border: none; border-radius: 4px; cursor: pointer;
+                            text-decoration: none; display: inline-block; margin-left: 10px;
+                        }}
+                        .download-btn:hover {{ background: #218838; color: white; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>{icon} {current_path.name}</h1>
+                        <a href="/logs/{current_path.parent.relative_to(LOGS_DIR) if current_path.parent != LOGS_DIR else ''}" class="back-link">← Back to logs</a>
+                        <a href="/logs/{current_path.relative_to(LOGS_DIR)}?download=1" class="download-btn">Download</a>
+                    </div>
+                    <div class="file-content">{file_content}</div>
+                </body>
+                </html>
+                """
+                return HTMLResponse(content=html_content)
+            except UnicodeDecodeError:
+                # If file can't be read as text, treat as binary
+                is_download_only = True
+        
+        # For binary files or when download is requested, serve as download
+        if is_download_only or download:
             return FileResponse(
                 path=str(current_path), 
                 filename=current_path.name,
                 media_type=mime_type
             )
         else:
+            # Fallback for inline display without wrapper (shouldn't normally reach here)
             return FileResponse(
                 path=str(current_path),
                 media_type=mime_type
