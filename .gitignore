@@ -8,3 +8,4 @@ htmlcov
 .venv/
 logs/
 test_data/
+browser_data/

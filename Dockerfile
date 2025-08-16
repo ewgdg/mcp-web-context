@@ -114,7 +114,8 @@ WORKDIR /app
 # Test patchright installation after setting up the user environment
 RUN /app/.venv/bin/python -c "from patchright.async_api import async_playwright; print('Patchright installed successfully')"
 
-RUN mkdir -p /app/logs /app/cache
+RUN mkdir -p /app/logs /app/cache /app/browser_data && \
+    chown -R ${APP_USER}:${APP_USER} /app/logs /app/cache /app/browser_data
 
 # Copy application files
 COPY --chown=${APP_USER}:${APP_USER} ./entrypoint.sh ./entrypoint.sh

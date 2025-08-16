@@ -47,7 +47,7 @@ The service runs in a Docker container with Wayland-based VNC for browser visual
 
 **Browser Management (`scraper.py`)**:
 
-- `PatchrightScraper` class manages Patchright browser instances
+- `Scraper` class manages Patchright browser instances
 - Load balancing across max 3 browser instances (5 tabs/browser threshold)
 - Per-domain rate limiting with random delays
 - Automatic screenshot capture on scraping failures for debugging
