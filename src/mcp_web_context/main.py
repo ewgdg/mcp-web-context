@@ -16,7 +16,7 @@ os.makedirs("./logs", exist_ok=True)
 # Setup rotating file handler for errors only
 error_handler = RotatingFileHandler(
     "./logs/errors.log",
-    maxBytes=3 * 1024 * 1024,  # 3MB
+    maxBytes=1 * 1024 * 1024,  # 1MB
     backupCount=3,
 )
 error_handler.setLevel(logging.ERROR)
