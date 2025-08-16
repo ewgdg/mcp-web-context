@@ -21,10 +21,9 @@ cp .env.example .env  # Edit with your API keys
 docker compose up --build
 ```
 
-**Note**: GPU passthrough is required for wayvnc to start. Currently configured for NVIDIA GPUs.
 
 - API: <http://localhost:8000>
-- VNC Debug: <http://localhost:5910> (wayvnc/wayvnc) - Use a VNC client (e.g., RealVNC)
+- VNC Debug: <http://localhost:5910> (wayvnc/wayvnc) - Use a VNC client (e.g., TigerVNC)
 
 ### Local Development
 
@@ -55,7 +54,6 @@ Copy `.env.example` to `.env` and add your Google Search API key, Custom Search 
 
 - Python 3.13+
 - Docker (recommended)
-- NVIDIA GPU (for Docker VNC)
 - Google Custom Search API credentials
 - OpenAI API key
 - Firefox ESR (handled automatically in Docker)

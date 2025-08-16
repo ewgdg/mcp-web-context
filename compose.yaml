@@ -2,11 +2,10 @@ services:
   mcp-web-context:
     build:
       context: .
-          
     ports:
-      # - "8000:8000"
+      - "8000:8000"
       - "5910:5910"
-    # restart: unless-stopped
+    restart: unless-stopped
     pull_policy: build
     volumes:
       - cache:/app/cache
@@ -21,9 +20,6 @@ services:
       - WAYVNC_ENABLE_AUTH=false
       - WAYVNC_USERNAME=wayvnc
       - WAYVNC_PASSWORD=wayvnc
-      # change the docker user id to current user id
-      # - PUID=${UID:?}
-      # - PGID=${GID:?}
       # nvidia
       - GBM_BACKEND=nvidia-drm 
       - __GLX_VENDOR_LIBRARY_NAME=nvidia
