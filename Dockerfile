@@ -56,7 +56,7 @@ RUN --mount=type=cache,target=$UV_CACHE_DIR \
 
 # Copy source code for installation
 COPY ./src ./src
-COPY ./test/test_browser.py ./test_browser.py
+COPY ./misc/test_browser.py ./test_browser.py
 
 # Install the application itself
 RUN --mount=type=cache,target=$UV_CACHE_DIR \

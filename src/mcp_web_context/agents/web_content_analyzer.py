@@ -5,14 +5,15 @@ A simple agent that uses LangChain and OpenAI to extract relevant content
 from a single web page based on a query, optimized for token efficiency.
 """
 
-import os
 from typing import Optional, cast
 
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field, SecretStr
+from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import Runnable
+from pydantic import BaseModel, Field
 
 from ..routers.scraping import ScrapeRequest, fetch_web_content
+from ..config import get_config_manager
 
 
 class LLMExtraction(BaseModel):
@@ -31,12 +32,13 @@ class LLMExtraction(BaseModel):
     )
     remarks: str = Field(
         default="",
-        description="Optional concise notes only for valuable insights about reliability, bias, or notable limitations"
+        description="Optional concise notes only for valuable insights about reliability, bias, or notable limitations",
     )
 
 
 class AnalyzeRequest(BaseModel):
     """Request model for content analysis."""
+
     url: str = Field(..., description="URL to analyze for relevant content")
     query: str = Field(..., description="Query describing what content to extract")
     allow_cache: bool = Field(True, description="Whether to use cached results")
@@ -44,6 +46,7 @@ class AnalyzeRequest(BaseModel):
 
 class ExtractedContent(LLMExtraction):
     """Final result combining scraped metadata with LLM analysis."""
+
     url: str = Field(..., description="The analyzed URL")
     title: str = Field(..., description="Page title")
 
@@ -54,34 +57,11 @@ class WebContentAnalyzer:
     relevant content from a single URL based on user queries.
     """
 
-    def __init__(self, openai_api_key: Optional[str] = None):
-        """
-        Initialize the analyzer with OpenAI API key.
-
-        Args:
-            openai_api_key: OpenAI API key. If None, will try to get from environment.
-        """
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "OpenAI API key is required. Set OPENAI_API_KEY environment variable."
-            )
-
-        reasoning = {
-            "effort": "low",  # 'low', 'medium', or 'high'
-            "summary": None,  # 'detailed', 'auto', or None
-        }
-
-        self.llm = ChatOpenAI(
-            model="gpt-5-mini",
-            api_key=SecretStr(api_key),
-            temperature=0.33,  # Low temperature for consistency
-            reasoning=reasoning,
-            output_version="responses/v1",
-        )
-
-        # Create structured LLM with Pydantic output
-        self.structured_llm = self.llm.with_structured_output(LLMExtraction)
+    def __init__(self):
+        """Initialize the analyzer with model fallback support."""
+        self.config_manager = get_config_manager()
+        self.llm: Optional[BaseChatModel] = None
+        self.agent: Optional[Runnable] = None
 
         # Create prompt template
         self.prompt = ChatPromptTemplate.from_messages(
@@ -128,6 +108,19 @@ Remarks Guidelines:
 - Only include concise notes about significant bias, reliability concerns, or data limitations
 - Avoid generic statements about confidence - the score already captures that"""
 
+    async def init_llm(self) -> None:
+        """Initialize the LLM using fallback system."""
+        if self.agent is None:
+            self.llm, _ = await self.config_manager.get_working_llm(
+                "web_content_analyzer"
+            )
+            if self.llm is None:
+                raise ValueError("No working models found for web_content_analyzer")
+            
+            # Build the complete agent chain
+            structured_llm = self.llm.with_structured_output(LLMExtraction)
+            self.agent = self.prompt | structured_llm
+
     async def analyze_url(self, request: AnalyzeRequest) -> ExtractedContent:
         """
         Analyze a single URL and extract content relevant to the query.
@@ -139,6 +132,9 @@ Remarks Guidelines:
             ExtractedContent with relevant information and confidence score
         """
         try:
+            # Initialize LLM if needed
+            await self.init_llm()
+
             # Fetch content using cached scraper
             scrape_request = ScrapeRequest(
                 urls=[request.url],
@@ -155,11 +151,12 @@ Remarks Guidelines:
             raw_content = result.content
             title = result.title
 
-            # Use structured LLM to extract relevant content
-            chain = self.prompt | self.structured_llm
+            # Use agent to extract relevant content
+            if self.agent is None:
+                raise ValueError("Agent not initialized")
             llm_result = cast(
                 LLMExtraction,
-                await chain.ainvoke(
+                await self.agent.ainvoke(
                     {"query": request.query, "title": title, "content": raw_content}
                 ),
             )
