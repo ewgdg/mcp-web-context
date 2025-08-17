@@ -120,6 +120,7 @@ RUN mkdir -p /app/logs /app/cache /app/browser_data && \
 # Copy application files
 COPY --chown=${APP_USER}:${APP_USER} ./entrypoint.sh ./entrypoint.sh
 COPY --chown=${APP_USER}:${APP_USER} ./sway_config /home/${APP_USER}/.config/sway/config
+COPY --chown=${APP_USER}:${APP_USER} ./config.yaml ./config.yaml
 
 # Update sway config with SWAY_RESOLUTION environment variable
 RUN sed -i "s/output HEADLESS-1 mode .*/output HEADLESS-1 mode ${SWAY_RESOLUTION:-1920x1080} position 0,0/" /home/${APP_USER}/.config/sway/config
