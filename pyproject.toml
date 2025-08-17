@@ -18,6 +18,10 @@ dependencies = [
     "markdownify",
     "langchain",
     "langchain-openai",
+    "langchain-anthropic",
+    "langchain-ollama",
+    "langchain-community",
+    "langchain-google-genai",
     "pyyaml>=6.0.2",
 ]
 
