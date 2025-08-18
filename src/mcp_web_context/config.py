@@ -144,6 +144,8 @@ class ConfigManager:
                     temperature=model_config.temperature,
                     reasoning=model_config.reasoning,
                     output_version="responses/v1",
+                    # prefer concise responses
+                    verbosity="low",
                 )
 
             elif model_config.provider == "anthropic":
