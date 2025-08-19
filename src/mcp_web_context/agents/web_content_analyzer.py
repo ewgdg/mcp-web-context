@@ -26,8 +26,8 @@ class LLMExtraction(BaseModel):
     relevant_content: str = Field(
         description="Content relevant to the query in markdown format, modified based on reliability"
     )
-    trust_score: int = Field(
-        description="0-100 percentage representing trust in content reliability",
+    confidence_score: int = Field(
+        description="0-100 percentage representing confidence in content reliability",
         ge=0,
         le=100,
     )
@@ -73,7 +73,7 @@ class WebContentAnalyzer:
                 ("system", self._get_system_prompt()),
                 (
                     "human",
-                    "Query: {query}\n\nWeb Page Title: {title}\n\nWeb Page Content:\n{content}\n\nExtract relevant content, assess its reliability, and modify based on trust level.",
+                    "Query: {query}\n\nWeb Page Title: {title}\n\nWeb Page Content:\n{content}\n\nExtract relevant content, assess its reliability, and modify based on confidence level.",
                 ),
             ]
         )
@@ -83,8 +83,8 @@ class WebContentAnalyzer:
         return """You are an expert content extraction agent. Your task is to:
 
 1. Extract ONLY the content from the provided web page that is directly relevant to the user's query
-2. Assess the reliability/trust of the extracted content
-3. Modify content based on reliability: compress low-trust content, remove questionable content
+2. Assess the reliability/confidence of the extracted content
+3. Modify content based on reliability: compress low-confidence content, remove questionable content
 4. Preserve important details and data points while being concise
 5. Format the extracted content in clean markdown
 
@@ -96,12 +96,12 @@ Guidelines:
 - Maintain markdown formatting for headers, links, lists, and emphasis to preserve structure
 
 Content Modification Rules:
-- High trust (80-100%): Include full relevant content
-- Medium trust (50-79%): Include but compress/summarize the content
-- Low trust (20-49%): Heavily compress or mention briefly with caveats
-- Very low trust (0-19%): Remove content or replace with disclaimer
+- High confidence (80-100%): Include full relevant content
+- Medium confidence (50-79%): Include but compress/summarize the content
+- Low confidence (20-49%): Heavily compress or mention briefly with caveats
+- Very low confidence (0-19%): Remove content or replace with disclaimer
 
-Trust Assessment Factors:
+Confidence Assessment Factors:
 - Source credibility (domain, authorship, citations)
 - Content quality (factual, well-sourced, recent)
 - Presence of supporting evidence
@@ -110,7 +110,7 @@ Trust Assessment Factors:
 Remarks Guidelines:
 - Keep remarks empty unless there's valuable insight to share
 - Only include concise notes about significant bias, reliability concerns, or data limitations
-- Avoid generic statements about trust - the score already captures that"""
+- Avoid generic statements about confidence - the score already captures that"""
 
     async def init_llm(self) -> None:
         """Initialize the LLM using fallback system."""
@@ -133,7 +133,7 @@ Remarks Guidelines:
             request: AnalyzeRequest containing URL, query, and cache settings
 
         Returns:
-            ExtractedContent with relevant information and trust score
+            ExtractedContent with relevant information and confidence score
         """
         try:
             # Initialize LLM if needed
@@ -169,7 +169,7 @@ Remarks Guidelines:
                 url=request.url,
                 title=title,
                 relevant_content=llm_result.relevant_content,
-                trust_score=llm_result.trust_score,
+                confidence_score=llm_result.confidence_score,
                 short_answer=llm_result.short_answer,
                 remarks=llm_result.remarks,
             )
@@ -183,6 +183,6 @@ Remarks Guidelines:
                 url=request.url,
                 title="Error",
                 relevant_content=f"Failed to analyze {request.url}: {str(e)}",
-                trust_score=0,
+                confidence_score=0,
                 short_answer="Analysis failed",
             )
