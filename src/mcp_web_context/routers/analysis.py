@@ -20,7 +20,7 @@ async def smart_analyze_content(request: AnalyzeRequest) -> ExtractedContent:
     Extract relevant content from a URL using AI analysis.
 
     Uses llm model to analyze web content, extract only information
-    relevant to the query, and assess content reliability with confidence scores.
+    relevant to the query, and assess content reliability with trust scores.
     """
     analyzer = WebContentAnalyzer()
     result = await analyzer.analyze_url(request)
