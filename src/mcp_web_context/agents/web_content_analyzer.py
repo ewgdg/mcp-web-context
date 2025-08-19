@@ -12,8 +12,12 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
+import logging
+
 from ..routers.scraping import ScrapeRequest, fetch_web_content
 from ..config import get_config_manager
+
+logger = logging.getLogger(__name__)
 
 
 class LLMExtraction(BaseModel):
@@ -116,7 +120,7 @@ Remarks Guidelines:
             )
             if self.llm is None:
                 raise ValueError("No working models found for web_content_analyzer")
-            
+
             # Build the complete agent chain
             structured_llm = self.llm.with_structured_output(LLMExtraction)
             self.agent = self.prompt | structured_llm
@@ -171,6 +175,9 @@ Remarks Guidelines:
             )
 
         except Exception as e:
+            logger.exception(
+                "WebContentAnalyzer.analyze_url failed for %s", request.url
+            )
             # Create error result
             return ExtractedContent(
                 url=request.url,

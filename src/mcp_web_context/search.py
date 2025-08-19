@@ -89,7 +89,10 @@ class GoogleSearch:
                 search_query = f"({domain_query}) {self.query}"
 
         encoded_query = urllib.parse.quote_plus(search_query)
-        logger.info(f"Google CSE searching for: {search_query!r}")
+        logger.info(
+            f"Google CSE searching for: {search_query!r}",
+            extra={"query": search_query},
+        )
 
         res = []
         try:
@@ -109,29 +112,73 @@ class GoogleSearch:
                     )
 
                     logger.debug(
-                        f"Requesting Google CSE page {page + 1}, start={start_index}"
+                        f"Requesting Google CSE page {page + 1}, start={start_index}",
+                        extra={
+                            "query": self.query,
+                            "page": page + 1,
+                            "start_index": start_index,
+                        },
                     )
 
                     try:
                         async with session.get(url) as resp:
                             if not (200 <= resp.status < 300):
+                                body = await resp.text()
                                 logger.error(
-                                    f"Google search: unexpected response status: {resp.status}"
+                                    f"Google search: unexpected response status: {resp.status}",
+                                    extra={
+                                        "status": resp.status,
+                                        "url": url,
+                                        "query": self.query,
+                                        "page": page + 1,
+                                        "start_index": start_index,
+                                        "body_snippet": body[:300],
+                                    },
                                 )
                                 return None
                             search_results = await resp.json()
+                            if "error" in search_results:
+                                err = search_results.get("error", {})
+                                logger.error(
+                                    "Google CSE API returned error",
+                                    extra={
+                                        "query": self.query,
+                                        "url": url,
+                                        "page": page + 1,
+                                        "start_index": start_index,
+                                        "api_error": err,
+                                    },
+                                )
+                                return None
                     except aiohttp.ClientError as e:
-                        logger.error(f"Google CSE connection error: {e}")
+                        logger.exception(
+                            f"Google CSE connection error: {e}",
+                            extra={
+                                "query": self.query,
+                                "url": url,
+                                "page": page + 1,
+                                "start_index": start_index,
+                            },
+                        )
                         return None
                     except Exception as e:
-                        logger.error(
-                            f"Error retrieving or parsing Google API response: {e}"
+                        logger.exception(
+                            f"Error retrieving or parsing Google API response: {e}",
+                            extra={
+                                "query": self.query,
+                                "url": url,
+                                "page": page + 1,
+                                "start_index": start_index,
+                            },
                         )
                         return None
 
                     items = search_results.get("items", [])
                     if not items:
-                        logger.info("No more items returned by the API.")
+                        logger.info(
+                            "No more items returned by the API.",
+                            extra={"query": self.query, "page": page + 1},
+                        )
                         break
 
                     for item in items:
@@ -152,7 +199,10 @@ class GoogleSearch:
                             res.append(search_result)
                             seen_links.add(link)
                         except Exception as e:
-                            logger.error(f"Error creating SearchResultEntry: {e}")
+                            logger.exception(
+                                f"Error creating SearchResultEntry: {e}",
+                                extra={"link": link, "title": title},
+                            )
                             continue
 
                         if len(res) >= max_results:
@@ -168,7 +218,10 @@ class GoogleSearch:
                     # Respect possible API throttling.
                     await asyncio.sleep(0.1)
         except Exception as e:
-            logger.exception(f"Unexpected error in Google Custom Search flow. {e}")
+            logger.exception(
+                f"Unexpected error in Google Custom Search flow. {e}",
+                extra={"query": self.query},
+            )
             return None
 
         return res[:max_results]

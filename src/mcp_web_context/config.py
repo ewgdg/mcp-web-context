@@ -23,10 +23,16 @@ class ModelConfig(BaseModel):
         description="Model provider (openai, anthropic, ollama, llamacpp, google, etc.)",
     )
     model: str = Field(..., description="Model name/identifier")
-    api_key_env: Optional[str] = Field(None, description="Environment variable for API key")
-    base_url: Optional[str] = Field(None, description="Base URL for API (e.g., for Ollama)")
+    api_key_env: Optional[str] = Field(
+        None, description="Environment variable for API key"
+    )
+    base_url: Optional[str] = Field(
+        None, description="Base URL for API (e.g., for Ollama)"
+    )
     temperature: float = Field(0.3, description="Temperature setting for the model")
-    reasoning: Optional[Dict[str, Any]] = Field(None, description="Reasoning configuration for OpenAI models")
+    reasoning: Optional[Dict[str, Any]] = Field(
+        None, description="Reasoning configuration for OpenAI models"
+    )
 
     # LlamaCpp specific parameters
     model_path: Optional[str] = Field(
@@ -51,21 +57,25 @@ class ModelConfig(BaseModel):
 
 class AgentConfig(BaseModel):
     """Configuration for an agent including its model fallback list."""
+
     models: List[ModelConfig] = Field(..., description="List of models to try in order")
 
 
 class Config(BaseModel):
     """Main configuration object."""
-    models: Dict[str, Dict[str, AgentConfig]] = Field(..., description="Model configurations by category and agent")
+
+    models: Dict[str, Dict[str, AgentConfig]] = Field(
+        ..., description="Model configurations by category and agent"
+    )
 
 
 class ConfigManager:
     """Manages configuration loading and model fallback logic."""
-    
+
     def __init__(self, config_path: Optional[str] = None):
         """
         Initialize config manager.
-        
+
         Args:
             config_path: Path to config file. If None, looks for config.yaml in project root.
         """
@@ -78,53 +88,55 @@ class ConfigManager:
                     break
                 current_dir = current_dir.parent
             else:
-                raise FileNotFoundError("Could not find project root with pyproject.toml")
-        
+                raise FileNotFoundError(
+                    "Could not find project root with pyproject.toml"
+                )
+
         self.config_path = Path(config_path)
         self.config = self._load_config()
-    
+
     def _load_config(self) -> Config:
         """Load configuration from YAML file."""
         if not self.config_path.exists():
             raise FileNotFoundError(f"Config file not found: {self.config_path}")
-        
-        with open(self.config_path, 'r') as f:
+
+        with open(self.config_path, "r") as f:
             raw_config = yaml.safe_load(f)
-        
+
         # Parse agents configuration
         agents_config = {}
-        if 'models' in raw_config and 'agents' in raw_config['models']:
-            for agent_name, agent_data in raw_config['models']['agents'].items():
+        if "models" in raw_config and "agents" in raw_config["models"]:
+            for agent_name, agent_data in raw_config["models"]["agents"].items():
                 agents_config[agent_name] = AgentConfig(**agent_data)
-        
+
         return Config(models={"agents": agents_config})
-    
+
     def get_agent_config(self, agent_name: str) -> Optional[AgentConfig]:
         """Get configuration for a specific agent."""
         return self.config.models.get("agents", {}).get(agent_name)
-    
+
     def get_model_configs(self, agent_name: str) -> List[ModelConfig]:
         """Get list of model configurations for an agent."""
         agent_config = self.get_agent_config(agent_name)
         if agent_config is None:
             return []
         return agent_config.models
-    
+
     def create_llm_instance(self, agent_name: str, model_index: int = 0):
         """
         Create an LLM instance for the specified agent and model index.
-        
+
         Args:
             agent_name: Name of the agent
             model_index: Index in the model list to use
-            
+
         Returns:
             LLM instance or None if failed
         """
         model_configs = self.get_model_configs(agent_name)
         if model_index >= len(model_configs):
             return None
-        
+
         model_config = model_configs[model_index]
 
         # Get API key for providers that need it
@@ -145,7 +157,8 @@ class ConfigManager:
                     reasoning=model_config.reasoning,
                     output_version="responses/v1",
                     # prefer concise responses
-                    verbosity="low",
+                    # verbosity="low", # todo: add it back when langchain supports it
+                    use_responses_api=True,
                 )
 
             elif model_config.provider == "anthropic":
@@ -240,14 +253,16 @@ class ConfigManager:
             # If create_llm_instance succeeds, it means credentials/config are valid
             llm = self.create_llm_instance(agent_name, i)
             if llm is not None:
-                logger.info(f"Successfully connected to {model_config.provider}/{model_config.model}")
+                logger.info(
+                    f"Successfully connected to {model_config.provider}/{model_config.model}"
+                )
                 return llm, model_config
             else:
                 logger.warning(
                     f"Model {model_config.provider}/{model_config.model} failed to initialize"
                 )
                 continue
-        
+
         logger.error(f"All models failed for agent: {agent_name}")
         return None, None
 

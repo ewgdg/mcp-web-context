@@ -3,36 +3,53 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.fastmcp import FastMCP
 import logging
+import logging.config
 from logging.handlers import RotatingFileHandler
 import os
+import yaml
 
 from .cache import initialize_cache, shutdown_cache
 from .routers import scraping, search, analysis, logs
 from .scraper import scraper_context_manager, Scraper
 from .services import service_locator
 
-os.makedirs("./logs", exist_ok=True)
 
-# Setup rotating file handler for errors only
-error_handler = RotatingFileHandler(
-    "./logs/errors.log",
-    maxBytes=1 * 1024 * 1024,  # 1MB
-    backupCount=3,
-)
-error_handler.setLevel(logging.ERROR)
-error_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
+def setup_logging(config_path: str = "logging.yaml") -> None:
+    os.makedirs("./logs", exist_ok=True)
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f) or {}
+        if isinstance(config, dict) and config.get("version"):
+            logging.config.dictConfig(config)
+            return
+    except Exception:
+        # If loading config fails, fall back to minimal in-code config
+        pass
 
-# Setup console handler for all logs including debug
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
+    # Fallback minimal setup (errors to file + console info)
+    error_handler = RotatingFileHandler(
+        "./logs/errors.log",
+        maxBytes=1 * 1024 * 1024,
+        backupCount=3,
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
 
-# Configure root logger
-logging.basicConfig(level=logging.INFO, handlers=[error_handler, console_handler])
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+
+    logging.basicConfig(
+        level=logging.INFO, handlers=[console_handler, error_handler], force=True
+    )
+
+
+# Initialize logging on import
+setup_logging()
 
 
 @asynccontextmanager

@@ -67,7 +67,10 @@ class Scraper:
                     await asyncio.sleep(random.uniform(0.6, 1.2))
                 yield
         except Exception as e:
-            self.logger.warning(f"Rate limiting error for {url}: {str(e)}")
+            self.logger.exception(
+                f"Rate limiting error for {url}: {str(e)}",
+                extra={"url": url, "domain": locals().get("domain")},
+            )
 
     @staticmethod
     async def natural_scroll(page: Page, delta_y: int, speed: float = 1.0) -> None:
@@ -157,14 +160,12 @@ class Scraper:
             )
         except asyncio.TimeoutError:
             Scraper.logger.warning(
-                f"timeout waiting for {until} after {timeout} seconds"
+                f"timeout waiting for {until} after {timeout} seconds",
+                extra={"until": until, "timeout": timeout},
             )
 
     async def _perform_scrape_operation(
-        self,
-        page: Page,
-        url: str,
-        output_format: Literal["text", "markdown", "html"]
+        self, page: Page, url: str, output_format: Literal["text", "markdown", "html"]
     ) -> Tuple[str, list[dict[str, Any]], str]:
         """Perform the actual scraping operation on a page"""
         await page.goto(url)
@@ -184,7 +185,8 @@ class Scraper:
             html = await asyncio.wait_for(page.content(), timeout=10.0)
         except asyncio.TimeoutError:
             self.logger.error(
-                f"Timeout getting content for {url} after 10 seconds"
+                f"Timeout getting content for {url} after 10 seconds",
+                extra={"url": url, "timeout": 10.0},
             )
             return (
                 f"Timeout getting content for {url} after 10 seconds",
@@ -223,17 +225,14 @@ class Scraper:
                 screenshot_dir = Path("logs/screenshots")
                 screenshot_dir.mkdir(exist_ok=True)
                 screenshot_path = (
-                    screenshot_dir
-                    / f"screenshot-error-{Scraper.get_domain(url)}.png"
+                    screenshot_dir / f"screenshot-error-{Scraper.get_domain(url)}.png"
                 )
                 try:
                     await asyncio.wait_for(
                         page.screenshot(path=screenshot_path), timeout=5.0
                     )
                 except asyncio.TimeoutError:
-                    self.logger.warning(
-                        f"Screenshot timeout for {url}, continuing..."
-                    )
+                    self.logger.warning(f"Screenshot timeout for {url}, continuing...")
                 except Exception as screenshot_error:
                     self.logger.warning(
                         f"Screenshot failed for {url}: {screenshot_error}"
@@ -243,7 +242,6 @@ class Scraper:
                 )
 
         return content, image_urls, title
-
 
     async def _cleanup_if_no_active_pages(self) -> None:
         """Clean up context and driver when no active scraping pages remain"""
@@ -258,7 +256,7 @@ class Scraper:
                             await self._shared_driver.stop()
                             self._shared_driver = None
         except Exception as e:
-            self.logger.error(
+            self.logger.exception(
                 f"Failed to cleanup context/driver: {type(e).__name__}: {str(e)}"
             )
 
@@ -339,24 +337,39 @@ class Scraper:
                     # Acquire resources in order: rate limit, then semaphore
                     await stack.enter_async_context(self.rate_limit_for_domain(url))
                     await stack.enter_async_context(self._tab_semaphore)
-                    
+
                     page = await context.new_page()
                     # Increment active pages counter
                     async with self._pages_count_lock:
                         self._active_pages_count += 1
-                    
-                    return await self._perform_scrape_operation(page, url, output_format)
-                    
+
+                    return await self._perform_scrape_operation(
+                        page, url, output_format
+                    )
+
                 except Exception as e:
                     is_last_attempt = attempt == max_retries
                     attempt_info = f" (attempt {attempt + 1}/{max_retries + 1})"
 
                     if is_last_attempt:
-                        self.logger.exception(f"An error occurred during scraping{attempt_info}")
+                        self.logger.exception(
+                            f"An error occurred during scraping{attempt_info}",
+                            extra={
+                                "url": url,
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries + 1,
+                            },
+                        )
                         return type(e).__name__, [], ""
                     else:
                         self.logger.warning(
-                            f"An error occurred during scraping{attempt_info}: {str(e)}. Retrying..."
+                            f"An error occurred during scraping{attempt_info}: {str(e)}. Retrying...",
+                            exc_info=True,
+                            extra={
+                                "url": url,
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries + 1,
+                            },
                         )
                         await asyncio.sleep(random.uniform(1.0, 2.0))
                 finally:
@@ -369,10 +382,15 @@ class Scraper:
                                 self._active_pages_count -= 1
                             await self._cleanup_if_no_active_pages()
                         except asyncio.TimeoutError:
-                            self.logger.error("Page close timed out after 10 seconds")
+                            self.logger.error(
+                                "Page close timed out after 10 seconds",
+                                extra={"url": url},
+                            )
                         except Exception as cleanup_error:
-                            self.logger.error(f"Failed to close page: {type(cleanup_error).__name__}: {str(cleanup_error)}")
-                            self.logger.debug(f"Close page exception details: {repr(cleanup_error)}")
+                            self.logger.exception(
+                                f"Failed to close page: {type(cleanup_error).__name__}: {str(cleanup_error)}",
+                                extra={"url": url},
+                            )
 
         # This should never be reached due to the logic above, but added for completeness
         return "Maximum retry attempts exceeded", [], ""
