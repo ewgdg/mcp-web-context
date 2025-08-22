@@ -57,8 +57,9 @@ class ExtractedContent(LLMExtraction):
 
 class WebContentAnalyzer:
     """
-    Simple web content analyzer that uses GPT-4o-mini to extract
+    Simple web content analyzer that uses AI to extract
     relevant content from a single URL based on user queries.
+    Recommended for quick, token-efficient content extraction.
     """
 
     def __init__(self):

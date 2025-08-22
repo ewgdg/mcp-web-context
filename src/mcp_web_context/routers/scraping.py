@@ -91,7 +91,8 @@ async def fetch_web_content(request: ScrapeRequest) -> ScrapeResponse:
     Extract clean text content, titles, and images from web pages.
 
     Uses browser automation to handle JavaScript and dynamic content.
-    Supports multiple URLs and returns structured data.
+
+    Use as a last resort to get content, since it output excessive content.
     """
     scraper = get_service(Scraper)
     scrape_results = await asyncio.gather(
