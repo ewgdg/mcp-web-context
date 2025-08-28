@@ -60,7 +60,6 @@ class WebContentAnalyzer:
     Simple web content analyzer that uses AI to extract
     relevant content from a single URL based on user queries.
     """
-
     def __init__(self):
         """Initialize the analyzer with model fallback support."""
         self.config_manager = get_config_manager()
@@ -73,7 +72,8 @@ class WebContentAnalyzer:
                 ("system", self._get_system_prompt()),
                 (
                     "human",
-                    "Query: {query}\n\nWeb Page Title: {title}\n\nWeb Page Content:\n{content}\n\nExtract relevant content, assess its reliability, and modify based on confidence level.",
+                    "Web Page Title: {title}\n\nWeb Page Content:\n<content>{content}</content>\n\nQuery: {query}\n\n"
+                    "Extract relevant content, assess its reliability, and modify based on confidence level.",
                 ),
             ]
         )
@@ -115,7 +115,7 @@ Remarks Guidelines:
     async def init_llm(self) -> None:
         """Initialize the LLM using fallback system."""
         if self.agent is None:
-            self.llm, _ = await self.config_manager.get_working_llm(
+            self.llm, model_config = await self.config_manager.get_working_llm(
                 "web_content_analyzer"
             )
             if self.llm is None:
@@ -123,6 +123,11 @@ Remarks Guidelines:
 
             # Build the complete agent chain
             structured_llm = self.llm.with_structured_output(LLMExtraction)
+            
+            # Set prompt cache key for OpenAI models
+            if model_config and model_config.provider == "openai":
+                structured_llm = structured_llm.bind(prompt_cache_key=self.__class__.__name__)
+            
             self.agent = self.prompt | structured_llm
 
     async def analyze_url(self, request: AnalyzeRequest) -> ExtractedContent:
@@ -158,10 +163,15 @@ Remarks Guidelines:
             # Use agent to extract relevant content
             if self.agent is None:
                 raise ValueError("Agent not initialized")
+
             llm_result = cast(
                 LLMExtraction,
                 await self.agent.ainvoke(
-                    {"query": request.query, "title": title, "content": raw_content}
+                    {
+                        "title": title,
+                        "content": raw_content,
+                        "query": request.query,
+                    },
                 ),
             )
 
