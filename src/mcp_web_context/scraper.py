@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 from typing import Any, Dict, cast, Tuple, Optional, AsyncGenerator
 import asyncio
 import logging
+import os
 from patchright.async_api import BrowserContext, Page, Playwright, async_playwright
 
 from .utils import (
@@ -272,12 +273,41 @@ class Scraper:
         except Exception:
             pass
 
+    async def _cleanup_chrome_locks(self) -> None:
+        """Remove Chrome profile lock files that may prevent browser startup"""
+        try:
+            # Kill any existing Chrome processes first
+            import subprocess
+            try:
+                result = subprocess.run(["pkill", "-f", "chrome"], capture_output=True, text=True)
+                if result.returncode == 0:
+                    self.logger.info("Killed existing Chrome processes")
+                await asyncio.sleep(1)  # Give processes time to terminate
+            except Exception as e:
+                self.logger.debug(f"No Chrome processes to kill or pkill failed: {e}")
+            
+            lock_files = ["SingletonLock", "SingletonSocket", "SingletonCookie"]
+            removed_count = 0
+            for lock_file in lock_files:
+                lock_path = Path(self._user_data_dir) / lock_file
+                if lock_path.exists() or lock_path.is_symlink():
+                    lock_path.unlink(missing_ok=True)
+                    removed_count += 1
+                    
+            if removed_count > 0:
+                self.logger.info(f"Removed {removed_count} Chrome lock files")
+        except Exception as e:
+            self.logger.error(f"Failed to cleanup Chrome locks: {e}", exc_info=True)
+
     async def _ensure_shared_context(self, headless: bool = False) -> None:
         """Ensure we have a shared persistent context"""
         if self._shared_driver is None:
             self._shared_driver = await async_playwright().start()
 
         if self._shared_context is None:
+            # Clean up Chrome lock files before launching
+            await self._cleanup_chrome_locks()
+            
             self._shared_context = (
                 await self._shared_driver.chromium.launch_persistent_context(
                     user_data_dir=self._user_data_dir,
