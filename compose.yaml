@@ -39,13 +39,16 @@ services:
       options:
         max-size: 1m
         max-file: "2"
+    # use this for nvidia runtime cdi mode
+    # see https://github.com/NVIDIA/nvidia-container-toolkit/issues/1246#issuecomment-3194219487
+    runtime: nvidia
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all # Number of GPUs to allocate, or `all`
-              # device_ids: ['0']
+              # count: all
+              device_ids: ["nvidia.com/gpu=all"]
               capabilities: [ gpu, compute, utility, video, display ]
 
 volumes:
