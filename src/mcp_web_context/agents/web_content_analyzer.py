@@ -59,7 +59,6 @@ class WebContentAnalyzer:
     """
     Simple web content analyzer that uses AI to extract
     relevant content from a single URL based on user queries.
-    Recommended for quick, token-efficient content extraction.
     """
 
     def __init__(self):
