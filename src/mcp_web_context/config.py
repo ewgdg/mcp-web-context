@@ -20,7 +20,7 @@ class ModelConfig(BaseModel):
 
     provider: str = Field(
         ...,
-        description="Model provider (openai, anthropic, ollama, llamacpp, google, etc.)",
+        description="Model provider (openai, openai-compatible, anthropic, ollama, llamacpp, google, etc.)",
     )
     model: str = Field(..., description="Model name/identifier")
     api_key_env: Optional[str] = Field(
@@ -159,6 +159,17 @@ class ConfigManager:
                     # prefer concise responses
                     # verbosity="low", # todo: add it back when langchain supports it
                     use_responses_api=True,
+                )
+
+            elif model_config.provider == "openai-compatible":
+                from langchain_openai import ChatOpenAI
+
+                return ChatOpenAI(
+                    model=model_config.model,
+                    api_key=api_key,
+                    temperature=model_config.temperature,
+                    base_url=model_config.base_url,
+                    use_responses_api=False,
                 )
 
             elif model_config.provider == "anthropic":
