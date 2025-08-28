@@ -79,7 +79,7 @@ Required (create `.env` file):
 
 - `GOOGLE_API_KEY` - Required for search functionality  
 - `GOOGLE_CX_KEY` - Required for Google Custom Search Engine
-- `OPENAI_API_KEY` - Required for AI-powered content analysis agent
+- AI provider API keys - Required for content analysis (see `config.yaml` for multi-provider support)
 
 Optional:
 
@@ -120,3 +120,4 @@ The codebase follows a modular FastAPI structure:
 - `src/mcp_web_context/search.py` - Google Custom Search integration
 - `src/mcp_web_context/cache.py` - SQLite caching with async support
 - `src/mcp_web_context/agents/` - AI-powered content analysis agents
+- `src/mcp_web_context/config.py` - Multi-provider AI configuration (OpenAI, OpenAI-compatible, Anthropic, Ollama, LlamaCpp, Google)

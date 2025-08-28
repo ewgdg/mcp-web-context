@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server for web browsing, content extraction, and 
 
 - **Web Content Extraction**: Headless browser automation using Patchright
 - **Google Custom Search**: Integration with Google Custom Search API  
-- **AI-Powered Analysis**: OpenAI-powered content analysis
+- **AI-Powered Analysis**: Multi-provider AI content analysis (OpenAI, OpenAI-compatible, Anthropic, etc.)
 - **Intelligent Caching**: SQLite-based caching with automatic cleanup
 - **Docker Ready**: Full containerized setup with VNC debugging
 
@@ -35,7 +35,7 @@ uv run -- uvicorn 'src.mcp_web_context.main:app' --host=0.0.0.0 --port=8000
 
 ## Configuration
 
-Copy `.env.example` to `.env` and add your Google Search API key, Custom Search Engine key, and OpenAI API key.
+Copy `.env.example` to `.env` and configure your API keys. See `config.yaml` for AI provider configuration (supports OpenAI, OpenAI-compatible, Anthropic, Ollama, etc.).
 
 ## API Endpoints
 
@@ -55,5 +55,5 @@ Copy `.env.example` to `.env` and add your Google Search API key, Custom Search 
 - Python 3.13+
 - Docker (recommended)
 - Google Custom Search API credentials
-- OpenAI API key
+- AI provider API key (OpenAI, Anthropic, etc.)
 - Firefox ESR (handled automatically in Docker)
