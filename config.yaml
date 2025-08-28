@@ -8,7 +8,7 @@ models:
         - provider: "openai"
           model: "gpt-5-mini"
           api_key_env: "OPENAI_API_KEY"
-          temperature: 0.5
+          temperature: 1
           reasoning:
             effort: "low"
             summary: null

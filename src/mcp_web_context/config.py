@@ -30,6 +30,7 @@ class ModelConfig(BaseModel):
         None, description="Base URL for API (e.g., for Ollama)"
     )
     temperature: float = Field(0.3, description="Temperature setting for the model")
+    top_p: Optional[float] = Field(None, description="Top-p (nucleus sampling) setting for the model")
     reasoning: Optional[Dict[str, Any]] = Field(
         None, description="Reasoning configuration for OpenAI models"
     )
@@ -154,6 +155,7 @@ class ConfigManager:
                     model=model_config.model,
                     api_key=api_key,
                     temperature=model_config.temperature,
+                    top_p=model_config.top_p,
                     reasoning=model_config.reasoning,
                     output_version="responses/v1",
                     # prefer concise responses
@@ -168,6 +170,7 @@ class ConfigManager:
                     model=model_config.model,
                     api_key=api_key,
                     temperature=model_config.temperature,
+                    top_p=model_config.top_p,
                     base_url=model_config.base_url,
                     use_responses_api=False,
                 )
@@ -179,6 +182,7 @@ class ConfigManager:
                     model_name=model_config.model,
                     api_key=api_key,  # type: ignore
                     temperature=model_config.temperature,
+                    top_p=model_config.top_p,
                     timeout=None,
                     stop=None,
                 )
@@ -190,6 +194,7 @@ class ConfigManager:
                     model=model_config.model,
                     base_url=model_config.base_url or "http://localhost:11434",
                     temperature=model_config.temperature,
+                    top_p=model_config.top_p,
                     reasoning=bool(model_config.reasoning),
                 )
 
@@ -208,6 +213,8 @@ class ConfigManager:
                 }
 
                 # Optional parameters with defaults
+                if model_config.top_p is not None:
+                    kwargs["top_p"] = model_config.top_p
                 if model_config.n_ctx:
                     kwargs["n_ctx"] = model_config.n_ctx
                 if model_config.n_gpu_layers is not None:
@@ -228,6 +235,7 @@ class ConfigManager:
                     model=model_config.model,
                     api_key=api_key,
                     temperature=model_config.temperature,
+                    top_p=model_config.top_p,
                 )
 
             else:
