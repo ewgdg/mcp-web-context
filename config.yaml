@@ -14,5 +14,5 @@ models:
             summary: null
         - provider: "ollama"
           model: "gemma3n"
-          base_url: "http://localhost:11434"
+          base_url: "http://localhost:11434/v1"
           temperature: 0.5
