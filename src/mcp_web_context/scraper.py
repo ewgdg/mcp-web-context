@@ -248,14 +248,18 @@ class Scraper:
         """Clean up context and driver when no active scraping pages remain"""
         try:
             if self._shared_context:
+                async with self._pages_count_lock:
+                    if self._active_pages_count <= 0:
+                        await asyncio.sleep(0.5)
                 # Check if no active pages remain
                 async with self._pages_count_lock:
-                    if self._active_pages_count == 0:
-                        await self._shared_context.close()
-                        self._shared_context = None
-                        if self._shared_driver:
-                            await self._shared_driver.stop()
-                            self._shared_driver = None
+                    if self._active_pages_count <= 0:
+                        async with self._context_lock:
+                            await self._shared_context.close()
+                            self._shared_context = None
+                            if self._shared_driver:
+                                await self._shared_driver.stop()
+                                self._shared_driver = None
         except Exception as e:
             self.logger.exception(
                 f"Failed to cleanup context/driver: {type(e).__name__}: {str(e)}"
@@ -265,8 +269,9 @@ class Scraper:
         """Clean up shared resources on exit"""
         try:
             if self._shared_context:
-                await self._shared_context.close()
-                self._shared_context = None
+                async with self._context_lock:
+                    await self._shared_context.close()
+                    self._shared_context = None
             if self._shared_driver:
                 await self._shared_driver.stop()
                 self._shared_driver = None
@@ -344,6 +349,7 @@ class Scraper:
         url: str,
         max_retries: int = 1,
         output_format: Literal["text", "markdown", "html"] = "markdown",
+        timeout: float = 15.0,
     ) -> Tuple[str, list[dict[str, Any]], str]:
         url = Scraper.normalize_url(url)
         if not url:
@@ -354,73 +360,84 @@ class Scraper:
             )
 
         for attempt in range(max_retries + 1):
-            page: Optional[Page] = None
-            async with AsyncExitStack() as stack:
-                try:
-                    # Get shared persistent context
-                    try:
-                        context = await self.get_context()
-                    except ImportError as e:
-                        self.logger.exception("Failed to initialize context")
-                        return type(e).__name__, [], ""
+            try:
+                return await asyncio.wait_for(
+                    self._scrape_attempt(url, output_format), timeout=timeout
+                )
+            except Exception as e:
+                is_last_attempt = attempt == max_retries
+                attempt_info = f" (attempt {attempt + 1}/{max_retries + 1})"
 
-                    # Acquire resources in order: rate limit, then semaphore
-                    await stack.enter_async_context(self.rate_limit_for_domain(url))
-                    await stack.enter_async_context(self._tab_semaphore)
-
-                    page = await context.new_page()
-                    # Increment active pages counter
-                    async with self._pages_count_lock:
-                        self._active_pages_count += 1
-
-                    return await self._perform_scrape_operation(
-                        page, url, output_format
+                if is_last_attempt:
+                    self.logger.exception(
+                        f"An error occurred during scraping{attempt_info}",
+                        extra={
+                            "url": url,
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries + 1,
+                        },
                     )
-
-                except Exception as e:
-                    is_last_attempt = attempt == max_retries
-                    attempt_info = f" (attempt {attempt + 1}/{max_retries + 1})"
-
-                    if is_last_attempt:
-                        self.logger.exception(
-                            f"An error occurred during scraping{attempt_info}",
-                            extra={
-                                "url": url,
-                                "attempt": attempt + 1,
-                                "max_retries": max_retries + 1,
-                            },
-                        )
-                        return type(e).__name__, [], ""
-                    else:
-                        self.logger.warning(
-                            f"An error occurred during scraping{attempt_info}: {str(e)}. Retrying...",
-                            exc_info=True,
-                            extra={
-                                "url": url,
-                                "attempt": attempt + 1,
-                                "max_retries": max_retries + 1,
-                            },
-                        )
-                        await asyncio.sleep(random.uniform(1.0, 2.0))
-                finally:
-                    # Clean up the page before exiting stack (which releases semaphore)
-                    if page:
-                        try:
-                            await asyncio.wait_for(page.close(), timeout=10.0)
-                            # Decrement active pages counter
-                            async with self._pages_count_lock:
-                                self._active_pages_count -= 1
-                            await self._cleanup_if_no_active_pages()
-                        except asyncio.TimeoutError:
-                            self.logger.error(
-                                "Page close timed out after 10 seconds",
-                                extra={"url": url},
-                            )
-                        except Exception as cleanup_error:
-                            self.logger.exception(
-                                f"Failed to close page: {type(cleanup_error).__name__}: {str(cleanup_error)}",
-                                extra={"url": url},
-                            )
+                    return type(e).__name__, [], ""
+                else:
+                    self.logger.warning(
+                        f"An error occurred during scraping{attempt_info}: {str(e)}. Retrying...",
+                        # exc_info=True,
+                        extra={
+                            "url": url,
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries + 1,
+                        },
+                    )
+                    await asyncio.sleep(random.uniform(1.0, 2.0))
 
         # This should never be reached due to the logic above, but added for completeness
         return "Maximum retry attempts exceeded", [], ""
+
+    async def _scrape_attempt(
+        self, url: str, output_format: Literal["text", "markdown", "html"]
+    ) -> Tuple[str, list[dict[str, Any]], str]:
+        """Single scraping attempt with all setup and cleanup"""
+        page: Optional[Page] = None
+        async with AsyncExitStack() as stack:
+            try:
+                # Get shared persistent context
+                try:
+                    context = await self.get_context()
+                except ImportError as e:
+                    self.logger.exception("Failed to initialize context")
+                    return type(e).__name__, [], ""
+
+                # Acquire resources in order: rate limit, then semaphore
+                await stack.enter_async_context(self.rate_limit_for_domain(url))
+                await stack.enter_async_context(self._tab_semaphore)
+
+                page = await context.new_page()
+                # Increment active pages counter
+                async with self._pages_count_lock:
+                    self._active_pages_count += 1
+
+                return await self._perform_scrape_operation(page, url, output_format)
+            finally:
+                # Clean up the page before exiting stack (which releases semaphore)
+                if page:
+                    # Fire and forget cleanup to avoid blocking the main flow
+                    asyncio.create_task(self._cleanup_page(page, url))
+
+    async def _cleanup_page(self, page: Page, url: str) -> None:
+        """Clean up page resources asynchronously"""
+        try:
+            await asyncio.wait_for(page.close(), timeout=10.0)
+            # Decrement active pages counter
+            async with self._pages_count_lock:
+                self._active_pages_count -= 1
+            await self._cleanup_if_no_active_pages()
+        except asyncio.TimeoutError:
+            self.logger.error(
+                "Page close timed out after 10 seconds",
+                extra={"url": url},
+            )
+        except Exception as cleanup_error:
+            self.logger.exception(
+                f"Failed to close page: {type(cleanup_error).__name__}: {str(cleanup_error)}",
+                extra={"url": url},
+            )
