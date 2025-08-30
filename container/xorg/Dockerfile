@@ -47,10 +47,10 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 # Install Chrome browsers using uvx (cached layer, independent of lock file)
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=$UV_CACHE_DIR \
     uvx patchright install-deps chrome
 
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=$UV_CACHE_DIR \
     uvx patchright install chrome
 
 # Create app directory and copy project files
