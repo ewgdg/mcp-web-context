@@ -83,12 +83,13 @@ ENV PYTHONUNBUFFERED=1
 ENV DATABASE_URL=sqlite+aiosqlite:////app/cache/cache.db
 
 ARG APP_USER=app
-ARG UID=1001
+ARG UID=1000
 
-# Create user and set up directories for runtime
-RUN useradd -m -s /bin/bash -u ${UID} ${APP_USER} && \
+# Delete any existing user with UID 1000 and create clean new user
+RUN (userdel -r $(getent passwd ${UID} | cut -d: -f1) 2>/dev/null || true) && \
+    useradd -m -s /bin/bash -u ${UID} ${APP_USER} && \
     mkdir -p /home/${APP_USER}/.config/sway /run/user/${UID} && \
-    chown -R ${APP_USER}:${APP_USER} /home/${APP_USER} /run/user/${UID}
+    chown -R ${UID}:0 /home/${APP_USER} /run/user/${UID}
 
 # Generate certificates with separate keys for WayVNC
 RUN mkdir -p /certs && \
@@ -96,43 +97,43 @@ RUN mkdir -p /certs && \
     -keyout /certs/key.pem -out /certs/cert.pem -subj "/CN=localhost" \
     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" && \
     openssl genrsa -traditional -out /certs/rsa_key.pem 4096 && \
-    chown -R ${APP_USER}:${APP_USER} /certs
+    chown -R ${UID}:0 /certs
 
 # Install Patchright browser as app user for proper installation location
-USER ${APP_USER}
+USER ${UID}
 
 # Copy built Python environment from builder
-COPY --from=builder --chown=${APP_USER}:${APP_USER} /app /app
+COPY --from=builder --chown=${UID}:0 /app /app
 
 # Add virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Switch to non-root user for runtime
-USER ${APP_USER}
+USER ${UID}
 WORKDIR /app
 
 # Test patchright installation after setting up the user environment
 RUN /app/.venv/bin/python -c "from patchright.async_api import async_playwright; print('Patchright installed successfully')"
 
 RUN mkdir -p /app/logs /app/cache /app/browser_data && \
-    chown -R ${APP_USER}:${APP_USER} /app/logs /app/cache /app/browser_data
+    chown -R ${UID}:0 /app/logs /app/cache /app/browser_data
 
 # Copy application files
-COPY --chown=${APP_USER}:${APP_USER} ./entrypoint.sh ./entrypoint.sh
-COPY --chown=${APP_USER}:${APP_USER} ./sway_config /home/${APP_USER}/.config/sway/config
-COPY --chown=${APP_USER}:${APP_USER} ./config.yaml ./config.yaml
+COPY --chown=${UID}:0 ./container/wayland/entrypoint.sh ./entrypoint.sh
+COPY --chown=${UID}:0 ./container/wayland/sway_config /home/${APP_USER}/.config/sway/config
+COPY --chown=${UID}:0 ./config.yaml ./config.yaml
 
 # Update sway config with SWAY_RESOLUTION environment variable
 RUN sed -i "s/output HEADLESS-1 mode .*/output HEADLESS-1 mode ${SWAY_RESOLUTION:-1920x1080} position 0,0/" /home/${APP_USER}/.config/sway/config
 
 # Create wayvnc config directory (config will be generated at runtime)
 RUN mkdir -p /home/${APP_USER}/.config/wayvnc && \
-    chown -R ${APP_USER}:${APP_USER} /home/${APP_USER}/.config/wayvnc
+    chown -R ${UID}:0 /home/${APP_USER}/.config/wayvnc
 
 USER root
 RUN chmod +x ./entrypoint.sh
 
-USER ${APP_USER}
+USER ${UID}
 ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
 ENV XDG_SESSION_TYPE=wayland
 

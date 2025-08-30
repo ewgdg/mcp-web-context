@@ -23,7 +23,7 @@ docker compose up --build
 
 
 - API: <http://localhost:8000>
-- VNC Debug: <http://localhost:5910> (wayvnc/wayvnc) - Use a VNC client (e.g., TigerVNC)
+- VNC Debug: <https://localhost:6901> (kasm_user/kasm_user)
 
 ### Local Development
 

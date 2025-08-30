@@ -1,0 +1,56 @@
+services:
+  mcp-web-context:
+    build:
+      context: ../..
+      dockerfile: container/xorg/Dockerfile
+    ports:
+      - "8000:8000"   # FastAPI application
+      - "6901:6901"   # KasmVNC web interface
+    restart: unless-stopped
+    pull_policy: build
+    volumes:
+      - cache:/app/cache
+      - logs:/app/logs
+      - browser:/app/browser_data
+      - ../../config.yaml:/app/config.yaml:ro
+    env_file:
+      - ../../.env
+    environment:
+      # KasmVNC Configuration
+      # the vnc user is kasm_user
+      - VNC_PW=kasm_user
+      # nvidia
+      - GBM_BACKEND=nvidia-drm 
+      - __GLX_VENDOR_LIBRARY_NAME=nvidia
+      
+    # privileged: true 
+    # cap_add:
+    #   - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    
+    # Large shared memory for modern web browsers  
+    shm_size: "2gb"
+    
+    logging:
+      driver: json-file
+      options:
+        max-size: "3m"
+        max-file: "2"
+    # for nvidia runtime cdi mode 
+    runtime: nvidia
+    # GPU support for hardware acceleration (optional)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # count: all
+              # for nvidia runtime cdi mode
+              device_ids: ["nvidia.com/gpu=all"]
+              capabilities: [gpu, compute, utility, video, display]
+
+volumes:
+  cache:
+  logs:
+  browser:

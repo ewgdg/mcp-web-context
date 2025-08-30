@@ -29,8 +29,8 @@ The service runs in a Docker container with Wayland-based VNC for browser visual
 ### Docker Development
 
 - Build and run: `docker compose up --build`
-- Service runs on port 8000, VNC on port 5910
-- VNC credentials: wayvnc/wayvnc for debugging browser sessions
+- Service runs on port 8000, KasmVNC on port 6901
+- VNC credentials: kasm_user/kasm_user for debugging browser sessions
 - Logs and screenshots saved to `./logs/` directory
 
 ## Architecture
@@ -83,21 +83,20 @@ Required (create `.env` file):
 
 Optional:
 
-- `RENDER_GROUP_GID` - For GPU device access in container
 - `DATABASE_URL` - Defaults to SQLite in container cache directory
 
 ### Browser Configuration
 
 The service uses Patchright (Firefox-based) with special configuration for containerized environments:
 
-- Wayland support for VNC rendering
+- KasmVNC support for web-based VNC access
 - Anti-fingerprinting and stealth features built-in
 - Automatic user agent and fingerprint spoofing
 - Firefox ESR as the base browser engine
 
 ## Testing and Debugging
 
-Access the VNC viewer at `http://localhost:5910` to visually debug browser sessions. Screenshots of failed scrapes are automatically saved to `logs/screenshots/`.
+Access the KasmVNC viewer at `https://localhost:6901` to visually debug browser sessions. Screenshots of failed scrapes are automatically saved to `logs/screenshots/`.
 
 The service includes a browser detection test that visits browserscan.net to verify the browser appears "normal" to anti-bot systems.
 
