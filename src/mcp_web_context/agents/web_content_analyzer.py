@@ -72,8 +72,12 @@ class WebContentAnalyzer:
                 ("system", self._get_system_prompt()),
                 (
                     "human",
-                    "Web Page Title: {title}\n\nWeb Page Content:\n<content>{content}</content>\n\nQuery: {query}\n\n"
-                    "Extract relevant content, assess its reliability, and modify based on confidence level.",
+                    "Web Page Title: {title}\n\nWeb Page Content:\n<content>{content}</content>",
+                ),
+                (
+                    "human",
+                    "Query: {query}\n\n"
+                    "<system-hint>Extract relevant content, assess its reliability, and modify based on confidence level.</system-hint>",
                 ),
             ]
         )
