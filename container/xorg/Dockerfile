@@ -46,9 +46,19 @@ ENV UV_CACHE_DIR=/root/.cache/uv
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
+# Install Patchright browser dependencies and Chrome
+RUN --mount=type=cache,target=${UV_CACHE_DIR} \
+    uv run patchright install-deps chrome
+
+RUN --mount=type=cache,target=${UV_CACHE_DIR} \
+    uv run patchright install chrome
+
 # Create app directory and copy project files
 RUN mkdir -p /app
 WORKDIR /app
+
+# Set up application directories with correct ownership
+RUN mkdir -p /app/logs /app/cache /app/browser_data
 
 # Copy Python project files
 COPY pyproject.toml uv.lock ./
@@ -59,16 +69,6 @@ COPY ./misc/test_browser.py ./test_browser.py
 RUN --mount=type=cache,target=$UV_CACHE_DIR \
     uv sync --locked --no-dev
 
-# Install Patchright browser dependencies and Chrome
-RUN --mount=type=cache,target=${UV_CACHE_DIR} \
-    uv run patchright install-deps chrome
-
-RUN --mount=type=cache,target=${UV_CACHE_DIR} \
-    uv run patchright install chrome
-
-# Set up application directories with correct ownership
-RUN mkdir -p /app/logs /app/cache /app/browser_data \
-    && chown -R 1000:0 /app/logs /app/cache /app/browser_data
 
 # Copy application configuration
 COPY ./config.yaml /app/config.yaml
