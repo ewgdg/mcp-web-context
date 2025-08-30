@@ -1,0 +1,435 @@
+"""
+Intelligent Search Agent
+
+An iterative search-analyze agent that finds comprehensive answers by using web search
+and content analysis in a loop until confident enough. The LLM decides when to exit
+the loop and provides final answers with cited references.
+"""
+
+import asyncio
+import json
+import logging
+from typing import Any, Optional, cast, List
+from pydantic import BaseModel, Field
+
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.runnables import Runnable
+from langchain_core.tools import tool, BaseTool
+
+from ..search import GoogleSearch, SearchResultEntry
+from .web_content_analyzer import WebContentAnalyzer, AnalyzeRequest
+from ..config import get_config_manager
+
+logger = logging.getLogger(__name__)
+
+
+class Reference(BaseModel):
+    """Reference to a source with relevance scoring."""
+
+    url: str = Field(..., description="Source URL")
+    title: str = Field(..., description="Page title")
+    relevance: int = Field(..., description="Relevance score 0-100", ge=0, le=100)
+    reliability: int = Field(..., description="Reliability score 0-100", ge=0, le=100)
+
+
+# Tools will be created as instance methods
+
+
+class Evidence(BaseModel):
+    """Evidence collected from content analysis."""
+
+    url: str = Field(..., description="Source URL")
+    title: str = Field(..., description="Page title")
+    relevance: int = Field(..., description="Relevance score 0-100", ge=0, le=100)
+    reliability: int = Field(..., description="Reliability score 0-100", ge=0, le=100)
+    short_answer: str = Field(..., description="Concise answer from this source")
+    content: str = Field(..., description="Relevant content from this source")
+
+
+class FinalAnswer(BaseModel):
+    """Final answer with references."""
+
+    answer: str = Field(..., description="Comprehensive answer in markdown format")
+    references: List[Reference] = Field(
+        ..., description="Sources cited in the answer, sorted by relevance"
+    )
+
+
+class IntelligentSearchAgent:
+    """
+    Intelligent search agent that iteratively searches and analyzes content
+    until it has enough confidence to provide a comprehensive answer.
+
+    Uses a use-and-discard pattern - each agent instance should handle only
+    one query and be discarded after completion.
+    """
+
+    # Development-defined constants
+    MAX_CONCURRENCY = 5  # Maximum concurrent URL analysis requests
+
+    def __init__(self):
+        """Initialize the intelligent search agent."""
+        self.config_manager = get_config_manager()
+        self.llm: Optional[BaseChatModel] = None
+        self.agent: Optional[Runnable[Any, AIMessage]] = None
+        self.exit_agent: Optional[Runnable[Any, AIMessage]] = None
+        self.web_analyzer = WebContentAnalyzer()
+        # Session state - reset for each query
+        self.evidence_collection: List[Evidence] = []
+        self.current_query: Optional[str] = None
+        self._is_running = False
+        self.tools = self._create_tools()
+
+        # Create prompt template
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", self._get_system_prompt()),
+                ("human", "{user_query}"),
+                MessagesPlaceholder("history"),
+            ]
+        )
+
+    def _get_system_prompt(self) -> str:
+        """Get the system prompt for the agent."""
+        return """You are an intelligent search agent that helps find comprehensive answers by iteratively searching and analyzing web content.
+
+Available Actions:
+1. **search**: Search the web for relevant content
+2. **analyze**: Analyze specific URLs for relevant content  
+3. **exit_search**: Provide final answer when confident enough
+
+Your goal is to gather enough high-quality evidence to answer the user's query comprehensively. Consider:
+
+**When to search:**
+- Need more sources or different perspectives
+- Current evidence is insufficient or low-confidence
+- Want to explore specific aspects of the query
+
+**When to analyze:**
+- Found promising URLs from search results
+- Want to extract detailed content from specific sources
+- Need to verify claims or get more detailed information
+
+**When to exit:**
+- Have sufficient high-quality evidence (confidence ≥ threshold)
+- Reached maximum iterations
+- Have comprehensive answer covering main aspects
+
+**Search Strategy:**
+- Use specific, focused queries
+- Vary query terms to find diverse sources
+- Consider domain restrictions for authoritative sources
+
+**Analysis Strategy:**
+- Select most promising URLs from search results
+- Balance quantity vs quality (don't analyze too many low-quality sources)
+
+**Exit Criteria:**
+- Confidence threshold met (based on evidence quality)
+- Can provide comprehensive, well-sourced answer
+- Have diverse, reliable sources to cite
+
+Always be strategic about your actions and aim for high-quality, comprehensive answers."""
+
+    def _create_tools(self) -> dict[str, BaseTool]:
+        """Create tools dictionary with bound methods."""
+
+        @tool
+        async def search_web(
+            query: str, max_results: int = 10, query_domains: Optional[List[str]] = None
+        ) -> str:
+            """Search the web for relevant content."""
+            self.current_query = query
+            res = await self._execute_search_tool(query, max_results, query_domains)
+            return json.dumps([item.model_dump() for item in res])
+
+        @tool
+        async def analyze_urls(urls: List[str]) -> str:
+            """Analyze specific URLs for relevant content."""
+            if not self.current_query:
+                raise Exception("No query is provided.")
+            res = await self._execute_analyze_tool(urls, query=self.current_query)
+            self.evidence_collection.extend(res)
+            return json.dumps([item.model_dump() for item in res])
+
+        @tool(return_direct=True)
+        def exit_search(answer: str) -> str:
+            """Provide final answer when confident enough."""
+            return answer
+
+        return {tool.name: tool for tool in (search_web, analyze_urls, exit_search)}
+
+    async def init_llm(self) -> None:
+        """Initialize the LLM using fallback system."""
+        if self.agent is None:
+            self.llm, self.model_config = await self.config_manager.get_working_llm(
+                "intelligent_search_agent"
+            )
+            if self.llm is None:
+                raise ValueError("No working models found for intelligent_search_agent")
+
+            # Set prompt cache key for OpenAI models first
+            self.llm = cast(
+                BaseChatModel, self.llm.bind(prompt_cache_key=self.__class__.__name__)
+            )
+
+            # Bind tools to the LLM
+            llm_with_tools = self.llm.bind_tools(
+                tools=cast(list[BaseTool], list(self.tools.values())),
+                tool_choice="required",
+                parallel_tool_calls=True,
+            )
+            self.agent = cast(Runnable[Any, AIMessage], self.prompt | llm_with_tools)
+
+            exit_only_tools = [self.tools["exit_search"]]
+            llm_with_exit_only = self.llm.bind_tools(
+                tools=exit_only_tools, tool_choice="required"
+            )
+            self.exit_agent = cast(
+                Runnable[Any, AIMessage], self.prompt | llm_with_exit_only
+            )
+
+    def _calculate_confidence(self, evidence: List[Evidence]) -> float:
+        """Calculate overall confidence based on evidence quality."""
+        if not evidence:
+            return 0.0
+
+        # Use the maximum confidence score from all evidence
+        # Confidence = (relevance * reliability) / 100
+        confidence_scores = [
+            (ev.relevance * ev.reliability) / 10000  # Convert to 0-1 range
+            for ev in evidence
+        ]
+
+        return max(confidence_scores) if confidence_scores else 0.0
+
+    def _create_evidence_summary(self, evidence: List[Evidence]) -> str:
+        """Create a summary of current evidence for the LLM."""
+        if not evidence:
+            return "No evidence collected yet."
+
+        summary_lines = []
+        for i, ev in enumerate(evidence, 1):
+            confidence = (ev.relevance * ev.reliability) / 100
+            summary_lines.append(
+                f"{i}. [{ev.title}]({ev.url}) - "
+                f"Relevance: {ev.relevance}%, Reliability: {ev.reliability}%, "
+                f"Confidence: {confidence:.1f}%\n"
+                f"   Answer: {ev.short_answer[:100]}{'...' if len(ev.short_answer) > 100 else ''}"
+            )
+
+        return "\n\n".join(summary_lines)
+
+    def _generate_references_from_evidence(
+        self, evidence: List[Evidence]
+    ) -> List[Reference]:
+        """Generate references from accumulated evidence, sorted by relevance."""
+        references = []
+        seen_urls = set()
+
+        # Sort evidence by confidence score (relevance * reliability)
+        sorted_evidence = sorted(
+            evidence, key=lambda e: e.relevance * e.reliability, reverse=True
+        )
+
+        for ev in sorted_evidence:
+            if ev.url not in seen_urls:
+                references.append(
+                    Reference(
+                        url=ev.url,
+                        title=ev.title,
+                        relevance=ev.relevance,
+                        reliability=ev.reliability,
+                    )
+                )
+                seen_urls.add(ev.url)
+
+        return references
+
+    async def _execute_search_tool(
+        self,
+        query: str,
+        max_results: int = 10,
+        query_domains: Optional[List[str]] = None,
+    ) -> List[SearchResultEntry]:
+        """Execute a search action."""
+        try:
+            search = GoogleSearch(query=query, query_domains=query_domains)
+            results = await search.search(max_results=max_results)
+            return results or []
+        except Exception as e:
+            logger.exception("Search failed for query: %s", query)
+            return []
+
+    async def _execute_analyze_tool(
+        self,
+        urls: List[str],
+        query: str,
+        allow_cache: bool = True,
+    ) -> List[Evidence]:
+        """Execute analyze action with concurrency control."""
+        if not urls:
+            return []
+
+        # Initialize web analyzer
+        await self.web_analyzer.init_llm()
+
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENCY)
+
+        async def analyze_single_url(url: str) -> Optional[Evidence]:
+            async with semaphore:
+                try:
+                    request = AnalyzeRequest(
+                        url=url,
+                        query=query,
+                        allow_cache=allow_cache,
+                    )
+                    result = await self.web_analyzer.analyze_url(request)
+
+                    return Evidence(
+                        url=result.url,
+                        title=result.title,
+                        relevance=result.relevance,
+                        reliability=result.reliability,
+                        short_answer=result.short_answer,
+                        content=result.relevant_content,
+                    )
+                except Exception as e:
+                    logger.exception("Analysis failed for URL: %s", url)
+                    return None
+
+        # Execute concurrent analysis
+        tasks = (analyze_single_url(url) for url in urls)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter out failed results
+        evidence = []
+        for result in results:
+            if isinstance(result, Evidence):
+                evidence.append(result)
+            elif not isinstance(result, Exception):
+                logger.warning("Unexpected result type: %s", type(result))
+            # todo: log error
+
+        return evidence
+
+    async def run(
+        self,
+        user_query: str,
+        max_iterations: int = 20,
+    ) -> FinalAnswer:
+        """
+        Run the intelligent search agent to find a comprehensive answer.
+
+        Args:
+            user_query: The search query to answer
+            max_iterations: Maximum number of iterations
+
+        Returns:
+            FinalAnswer with comprehensive response and references
+
+        Raises:
+            ValueError: If agent is already running (use-and-discard pattern)
+        """
+        # Reject concurrent requests - use-and-discard pattern
+        if self._is_running or self.current_query is not None:
+            raise ValueError(
+                "Agent is already running or has been used. Create a new agent instance for each query."
+            )
+
+        try:
+            self._is_running = True
+            await self.init_llm()
+
+            if self.llm is None or self.agent is None or self.exit_agent is None:
+                raise ValueError("Agent not initialized")
+
+            # Reset and initialize session state
+            self.current_query = user_query
+            self.evidence_collection = []
+            final_answer = None
+
+            # Maintain conversation history across iterations
+            history: list[BaseMessage] = []
+
+            for iteration in range(max_iterations + 1):
+                active_agent = self.agent
+                if iteration == max_iterations:
+                    logger.info(
+                        "Maximum iterations reached, forcing agent to provide final answer"
+                    )
+                    active_agent = self.exit_agent
+
+                # Include evidence summary in context for informed decision making
+                evidence_summary = self._create_evidence_summary(
+                    self.evidence_collection
+                )
+                context_query = f"{user_query}\n\nCurrent Evidence:\n{evidence_summary}"
+
+                # Get next action from LLM
+                try:
+                    response = await active_agent.ainvoke(
+                        {"user_query": context_query, "history": history},
+                    )
+
+                    # Add LLM response to history
+                    history.append(response)
+
+                    has_tool_call = False
+                    # Check if LLM wants to use a tool
+                    if response.tool_calls:
+                        for tool_call in response.tool_calls:
+                            tool_name = tool_call["name"]
+                            tool_args = tool_call["args"]
+
+                            tool = self.tools.get(tool_call["name"], None)
+                            if not tool:
+                                logger.error("Unknown tool: %s", tool_name)
+                                continue
+
+                            logger.debug(
+                                "Tool call: %s with args: %s", tool_name, tool_args
+                            )
+
+                            has_tool_call = True
+                            tool_message: ToolMessage = await tool.ainvoke(tool_call)
+
+                            # Add tool message to history
+                            history.append(tool_message)
+
+                            if tool.return_direct:
+                                final_answer = tool_message.text()
+                                break
+
+                    if not has_tool_call:
+                        logger.warning("No tool call in response.")
+                        final_answer = response.text()
+                        break
+
+                except Exception:
+                    logger.exception("LLM action failed on iteration %d", iteration)
+                    # Force exit on LLM failure
+                    break
+                finally:
+                    confidence = self._calculate_confidence(self.evidence_collection)
+                    logger.info(
+                        "Iteration %d/%d - Confidence: %.1f%%",
+                        iteration,
+                        max_iterations,
+                        confidence * 100,
+                    )
+
+            if not final_answer:
+                final_answer = "Unable to find sufficient information to answer this query comprehensively."
+
+            references = self._generate_references_from_evidence(
+                self.evidence_collection
+            )
+            return FinalAnswer(answer=final_answer, references=references)
+
+        finally:
+            # Clean up state - agent is now used and should be discarded
+            self._is_running = False

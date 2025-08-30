@@ -9,7 +9,7 @@ import os
 import yaml
 
 from .cache import initialize_cache, shutdown_cache
-from .routers import scraping, search, analysis, logs
+from .routers import scraping, search, logs, agent
 from .scraper import scraper_context_manager, Scraper
 from .services import service_locator
 
@@ -99,13 +99,13 @@ def health_check():
 # Include routers
 app.include_router(scraping.router)
 app.include_router(search.router)
-app.include_router(analysis.router)
 app.include_router(logs.router)
+app.include_router(agent.router)
 
 # Register MCP tools from routers
 scraping.register_mcp_tools(mcp)
 search.register_mcp_tools(mcp)
-analysis.register_mcp_tools(mcp)
+agent.register_mcp_tools(mcp)
 
 
 # Mount MCP SSE app - it provides /sse and /messages endpoints
