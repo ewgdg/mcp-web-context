@@ -171,6 +171,9 @@ class ConfigManager:
                     api_key=api_key,
                     temperature=model_config.temperature,
                     top_p=model_config.top_p,
+                    reasoning_effort=model_config.reasoning.get("effort", None)
+                    if model_config.reasoning
+                    else None,
                     base_url=model_config.base_url,
                     use_responses_api=False,
                 )
