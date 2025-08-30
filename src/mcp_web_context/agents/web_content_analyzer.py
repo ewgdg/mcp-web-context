@@ -24,10 +24,15 @@ class LLMExtraction(BaseModel):
     """Structured output from LLM for content analysis."""
 
     relevant_content: str = Field(
-        description="Content relevant to the query in markdown format, modified based on reliability"
+        description="Content relevant to the query in markdown format, modified based on relevance and reliability"
     )
-    confidence_score: int = Field(
-        description="0-100 percentage representing confidence in content reliability",
+    relevance: int = Field(
+        description="0-100 percentage representing how well content matches/answers the query",
+        ge=0,
+        le=100,
+    )
+    reliability: int = Field(
+        description="0-100 percentage representing how trustworthy the content/source is",
         ge=0,
         le=100,
     )
@@ -87,8 +92,8 @@ class WebContentAnalyzer:
         return """You are an expert content extraction agent. Your task is to:
 
 1. Extract ONLY the content from the provided web page that is directly relevant to the user's query
-2. Assess the reliability/confidence of the extracted content
-3. Modify content based on reliability: compress low-confidence content, remove questionable content
+2. Assess both relevance and reliability of the extracted content
+3. Modify content based on both scores: filter irrelevant content, adjust presentation based on reliability
 4. Preserve important details and data points while being concise
 5. Format the extracted content in clean markdown
 
@@ -100,12 +105,13 @@ Guidelines:
 - Maintain markdown formatting for headers, links, lists, and emphasis to preserve structure
 
 Content Modification Rules:
+- For each piece of info, the compression ratio is determined by the confidence score, evaluated based on the product score of relevance and reliability
 - High confidence (80-100%): Include full relevant content
 - Medium confidence (50-79%): Include but compress/summarize the content
 - Low confidence (20-49%): Heavily compress or mention briefly with caveats
 - Very low confidence (0-19%): Remove content or replace with disclaimer
 
-Confidence Assessment Factors:
+Reliability Assessment Factors:
 - Source credibility (domain, authorship, citations)
 - Content quality (factual, well-sourced, recent)
 - Presence of supporting evidence
@@ -183,7 +189,8 @@ Remarks Guidelines:
                 url=request.url,
                 title=title,
                 relevant_content=llm_result.relevant_content,
-                confidence_score=llm_result.confidence_score,
+                relevance=llm_result.relevance,
+                reliability=llm_result.reliability,
                 short_answer=llm_result.short_answer,
                 remarks=llm_result.remarks,
             )
@@ -197,6 +204,7 @@ Remarks Guidelines:
                 url=request.url,
                 title="Error",
                 relevant_content=f"Failed to analyze {request.url}: {str(e)}",
-                confidence_score=0,
+                relevance=0,
+                reliability=0,
                 short_answer="Analysis failed",
             )
