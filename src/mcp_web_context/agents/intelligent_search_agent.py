@@ -95,7 +95,7 @@ class IntelligentSearchAgent:
         """Get the system prompt for the agent."""
         return """You are an intelligent search agent that helps find comprehensive answers by iteratively searching and analyzing web content.
 
-Your goal is to gather enough high-quality evidence to answer the user's query comprehensively. 
+Your goal is to gather enough high-quality evidence to generate a final report to the user's query comprehensively. 
 
 **When to search:**
 - Need more sources or different perspectives
@@ -147,14 +147,14 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
 
         @tool(return_direct=True)
         def report(
-            response: Annotated[
+            content: Annotated[
                 str,
                 ...,
                 "The full comprehensive final response to the query that directly returned to the user.",
             ],
         ) -> str:
             """Use this tool to complete the search process. A final answer or last response to the user query is required. There is no more conversation after this invocation."""
-            return response
+            return content
 
         return {tool.name: tool for tool in (search_web, analyze_urls, report)}
 
