@@ -9,7 +9,7 @@ the loop and provides final answers with cited references.
 import asyncio
 import json
 import logging
-from typing import Any, Optional, cast, List
+from typing import Annotated, Any, Optional, cast, List
 from pydantic import BaseModel, Field
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -95,16 +95,11 @@ class IntelligentSearchAgent:
         """Get the system prompt for the agent."""
         return """You are an intelligent search agent that helps find comprehensive answers by iteratively searching and analyzing web content.
 
-Available Actions:
-1. **search**: Search the web for relevant content
-2. **analyze**: Analyze specific URLs for relevant content  
-3. **exit_search**: Provide final answer when confident enough
-
-Your goal is to gather enough high-quality evidence to answer the user's query comprehensively. Consider:
+Your goal is to gather enough high-quality evidence to answer the user's query comprehensively. 
 
 **When to search:**
 - Need more sources or different perspectives
-- Current evidence is insufficient or low-confidence
+- Current evidence is insufficient 
 - Want to explore specific aspects of the query
 
 **When to analyze:**
@@ -113,9 +108,10 @@ Your goal is to gather enough high-quality evidence to answer the user's query c
 - Need to verify claims or get more detailed information
 
 **When to exit:**
-- Have sufficient high-quality evidence (confidence ≥ threshold)
-- Reached maximum iterations
-- Have comprehensive answer covering main aspects
+- Have gathered sufficient high-quality evidence from multiple reliable sources
+- Can provide a comprehensive, well-sourced answer covering the main aspects of the query
+- Have analyzed the most relevant and authoritative sources available
+- Further searching is unlikely to significantly improve the answer
 
 **Search Strategy:**
 - Use specific, focused queries
@@ -123,13 +119,8 @@ Your goal is to gather enough high-quality evidence to answer the user's query c
 - Consider domain restrictions for authoritative sources
 
 **Analysis Strategy:**
-- Select most promising URLs from search results
+- Prioritize authoritative and reliable sources
 - Balance quantity vs quality (don't analyze too many low-quality sources)
-
-**Exit Criteria:**
-- Confidence threshold met (based on evidence quality)
-- Can provide comprehensive, well-sourced answer
-- Have diverse, reliable sources to cite
 
 Always be strategic about your actions and aim for high-quality, comprehensive answers."""
 
@@ -155,9 +146,13 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
             return json.dumps([item.model_dump() for item in res])
 
         @tool(return_direct=True)
-        def exit_search(answer: str) -> str:
-            """Provide final answer when confident enough."""
-            return answer
+        def exit_search(
+            result: Annotated[
+                str, ..., "The full comprehensive final result to the query."
+            ],
+        ) -> str:
+            """Use this tool to complete the search process. A final answer or response to the user query is required."""
+            return result
 
         return {tool.name: tool for tool in (search_web, analyze_urls, exit_search)}
 
@@ -203,7 +198,12 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
             for ev in evidence
         ]
 
-        return max(confidence_scores) if confidence_scores else 0.0
+        if not confidence_scores:
+            return 0.0
+
+        max_confidence = max(confidence_scores)
+        avg_confidence = sum(confidence_scores) / len(confidence_scores)
+        return 0.5 * max_confidence + 0.5 * avg_confidence
 
     def _create_evidence_summary(self, evidence: List[Evidence]) -> str:
         """Create a summary of current evidence for the LLM."""
@@ -246,7 +246,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                 )
                 seen_urls.add(ev.url)
 
-        return references
+        return references[:15]
 
     async def _execute_search_tool(
         self,
@@ -288,6 +288,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                         allow_cache=allow_cache,
                     )
                     result = await self.web_analyzer.analyze_url(request)
+                    logger.debug("web analyze result: %s", result.model_dump())
 
                     return Evidence(
                         url=result.url,
@@ -369,16 +370,11 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                     )
                     active_agent = self.exit_agent
 
-                # Include evidence summary in context for informed decision making
-                evidence_summary = self._create_evidence_summary(
-                    self.evidence_collection
-                )
-                context_query = f"{user_query}\n\nCurrent Evidence:\n{evidence_summary}"
-
                 # Get next action from LLM
+                logger.debug("Processing iteration %d", iteration)
                 try:
                     response = await active_agent.ainvoke(
-                        {"user_query": context_query, "history": history},
+                        {"user_query": user_query, "history": history},
                     )
 
                     # Add LLM response to history
@@ -387,18 +383,19 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                     has_tool_call = False
                     # Check if LLM wants to use a tool
                     if response.tool_calls:
+                        logger.debug(
+                            "LLM wants to use %d tools", len(response.tool_calls)
+                        )
                         for tool_call in response.tool_calls:
                             tool_name = tool_call["name"]
                             tool_args = tool_call["args"]
 
-                            tool = self.tools.get(tool_call["name"], None)
+                            tool = self.tools.get(tool_name, None)
                             if not tool:
                                 logger.error("Unknown tool: %s", tool_name)
                                 continue
 
-                            logger.debug(
-                                "Tool call: %s with args: %s", tool_name, tool_args
-                            )
+                            logger.debug("Executing tool: %s with args: %s", tool_name, tool_args)
 
                             has_tool_call = True
                             tool_message: ToolMessage = await tool.ainvoke(tool_call)
@@ -407,11 +404,23 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                             history.append(tool_message)
 
                             if tool.return_direct:
-                                final_answer = tool_message.text()
+                                final_answer = ""
+                                response_text = response.text()
+                                tool_message_text = tool_message.text()
+                                if response_text:
+                                    final_answer += response_text
+                                if tool_message_text:
+                                    if final_answer:
+                                        final_answer += "\n\n"
+                                    final_answer += tool_message_text
                                 break
 
+                    # If we got a direct return from a tool, exit the iteration loop
+                    if final_answer is not None:
+                        break
+
                     if not has_tool_call:
-                        logger.warning("No tool call in response.")
+                        logger.warning("No tool call in response - forcing exit")
                         final_answer = response.text()
                         break
 
@@ -421,12 +430,15 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                     break
                 finally:
                     confidence = self._calculate_confidence(self.evidence_collection)
-                    logger.info(
-                        "Iteration %d/%d - Confidence: %.1f%%",
-                        iteration,
-                        max_iterations,
-                        confidence * 100,
-                    )
+                    # Only log confidence every 5 iterations or on final iteration
+                    if iteration % 5 == 0 or iteration == max_iterations:
+                        logger.info(
+                            "Iteration %d/%d - Confidence: %.1f%%, Evidence: %d sources",
+                            iteration,
+                            max_iterations,
+                            confidence * 100,
+                            len(self.evidence_collection),
+                        )
 
             if not final_answer:
                 final_answer = "Unable to find sufficient information to answer this query comprehensively."

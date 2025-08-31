@@ -27,7 +27,7 @@ class LLMExtraction(BaseModel):
         description="Content relevant to the query in markdown format, modified based on relevance and reliability"
     )
     relevance: int = Field(
-        description="0-100 percentage representing how well content matches/answers the query",
+        description="0-100 percentage representing how well content matches/answers/relates to the query",
         ge=0,
         le=100,
     )
@@ -116,6 +116,13 @@ Reliability Assessment Factors:
 - Content quality (factual, well-sourced, recent)
 - Presence of supporting evidence
 - Consistency and logical structure
+
+Relevance Assessment Factors:
+- Direct answer to query (90-100%)
+- Contextual information that helps answer (70-90%)
+- Topic/subject alignment (50-70%)
+- Tangentially related content (20-50%)
+- Unrelated content (0-20%)
 
 Remarks Guidelines:
 - Keep remarks empty unless there's valuable insight to share
