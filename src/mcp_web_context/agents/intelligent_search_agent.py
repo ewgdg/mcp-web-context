@@ -435,14 +435,13 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                 finally:
                     confidence = self._calculate_confidence(self.evidence_collection)
                     # Only log confidence every 5 iterations or on final iteration
-                    if iteration % 5 == 0 or iteration == max_iterations:
-                        logger.info(
-                            "Iteration %d/%d - Confidence: %.1f%%, Evidence: %d sources",
-                            iteration,
-                            max_iterations,
-                            confidence * 100,
-                            len(self.evidence_collection),
-                        )
+                    logger.info(
+                        "Iteration %d/%d - Confidence: %.1f%%, Evidence: %d sources",
+                        iteration,
+                        max_iterations,
+                        confidence * 100,
+                        len(self.evidence_collection),
+                    )
 
             if not final_answer:
                 final_answer = "Unable to find sufficient information to answer this query comprehensively."
