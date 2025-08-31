@@ -107,7 +107,7 @@ Your goal is to gather enough high-quality evidence to answer the user's query c
 - Want to extract detailed content from specific sources
 - Need to verify claims or get more detailed information
 
-**When to exit:**
+**When to report:**
 - Have gathered sufficient high-quality evidence from multiple reliable sources
 - Can provide a comprehensive, well-sourced answer covering the main aspects of the query
 - Have analyzed the most relevant and authoritative sources available
@@ -146,15 +146,17 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
             return json.dumps([item.model_dump() for item in res])
 
         @tool(return_direct=True)
-        def exit_search(
-            result: Annotated[
-                str, ..., "The full comprehensive final result to the query."
+        def report(
+            response: Annotated[
+                str,
+                ...,
+                "The full comprehensive final response to the query that directly returned to the user.",
             ],
         ) -> str:
-            """Use this tool to complete the search process. A final answer or response to the user query is required."""
-            return result
+            """Use this tool to complete the search process. A final answer or last response to the user query is required. There is no more conversation after this invocation."""
+            return response
 
-        return {tool.name: tool for tool in (search_web, analyze_urls, exit_search)}
+        return {tool.name: tool for tool in (search_web, analyze_urls, report)}
 
     async def init_llm(self) -> None:
         """Initialize the LLM using fallback system."""
