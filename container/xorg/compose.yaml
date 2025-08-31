@@ -13,6 +13,7 @@ services:
       - logs:/app/logs
       - browser:/app/browser_data
       - ../../config.yaml:/app/config.yaml:ro
+      - ./kasmvnc.yaml:/home/kasm-user/.vnc/kasmvnc.yaml:ro
     env_file:
       - ../../.env
     environment:

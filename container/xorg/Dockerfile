@@ -101,6 +101,8 @@ RUN $STARTUPDIR/set_user_permission.sh $HOME
 
 ENV HOME=/home/kasm-user
 WORKDIR $HOME
+# Create .vnc directory for KasmVNC config
+COPY ./container/xorg/kasmvnc.yaml $HOME/.vnc/kasmvnc.yaml
 RUN mkdir -p $HOME && chown -R 1000:0 $HOME
 
 # Set ownership of app directory
