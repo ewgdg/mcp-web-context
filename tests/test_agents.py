@@ -46,7 +46,8 @@ class TestWebContentAnalyzer:
         # Mock the LLM result
         mock_llm_result = LLMExtraction(
             relevant_content="Machine learning algorithms are computational methods that learn patterns from data.",
-            confidence_score=85,
+            relevance=90,
+            reliability=95,
             short_answer="Machine learning algorithms learn patterns from data",
             remarks="Content appears well-sourced and accurate"
         )
@@ -74,7 +75,8 @@ class TestWebContentAnalyzer:
         assert result is not None
         assert result.url == "https://example.com"
         assert result.title == "Test Page"
-        assert result.confidence_score == 85
+        assert result.relevance == 90
+        assert result.reliability == 95
         assert "machine learning" in result.relevant_content.lower()
         assert "learn patterns from data" in result.short_answer.lower()
         assert result.remarks == "Content appears well-sourced and accurate"
@@ -109,7 +111,8 @@ class TestWebContentAnalyzer:
         assert result is not None
         assert result.url == "https://example.com"
         assert result.title == "Error"
-        assert result.confidence_score == 0
+        assert result.relevance == 0
+        assert result.reliability == 0
         assert "failed" in result.short_answer.lower()
         assert "network error" in result.relevant_content.lower()
     
@@ -137,5 +140,6 @@ class TestWebContentAnalyzer:
         assert result is not None
         assert result.url == "https://example.com"
         assert result.title == "Error"
-        assert result.confidence_score == 0
+        assert result.relevance == 0
+        assert result.reliability == 0
         assert "no working models" in result.relevant_content.lower()
