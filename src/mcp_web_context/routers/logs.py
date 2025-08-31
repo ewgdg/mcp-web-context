@@ -211,7 +211,7 @@ def get_file_browser_html(current_path: Path, request_url: str) -> str:
     return html
 
 
-def format_file_size(size_bytes: int) -> str:
+def format_file_size(size_bytes: float) -> str:
     """Format file size in human readable format."""
     if size_bytes == 0:
         return "0 B"
