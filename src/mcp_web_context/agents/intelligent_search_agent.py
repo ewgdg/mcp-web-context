@@ -180,7 +180,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
             )
             self.agent = cast(Runnable[Any, AIMessage], self.prompt | llm_with_tools)
 
-            exit_only_tools = [self.tools["exit_search"]]
+            exit_only_tools = [
+                tool for tool in self.tools.values() if tool.return_direct
+            ]
             llm_with_exit_only = self.llm.bind_tools(
                 tools=exit_only_tools, tool_choice="required"
             )
