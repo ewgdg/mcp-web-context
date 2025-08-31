@@ -22,11 +22,6 @@ models:
         - provider: "openai"
           model: "gpt-5-mini"
           api_key_env: "OPENAI_API_KEY"
-          temperature: 0.7
           reasoning:
             effort: "medium"
-            summary: null
-        - provider: "ollama"
-          model: "gemma3n"
-          base_url: "http://localhost:11434/v1"
-          temperature: 0.6
+            summary: "auto"
