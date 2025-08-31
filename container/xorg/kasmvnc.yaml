@@ -1,4 +1,4 @@
 logging:
   log_writer_name: all
   # Lower = less verbose, Higher = more verbose (0-100 range)
-  level: 10
+  level: 0
