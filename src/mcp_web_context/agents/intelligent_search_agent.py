@@ -297,6 +297,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                 try:
                     # Check for cancellation before analyzing each URL
                     await asyncio.sleep(0)
+                    logger.info("analyzing url: %s", url)
 
                     request = AnalyzeRequest(
                         url=url,
@@ -402,7 +403,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                     active_agent = self.exit_agent
 
                 # Get next action from LLM
-                logger.debug("Processing iteration %d", iteration)
+                logger.info("Processing iteration %d", iteration)
                 try:
                     response = await active_agent.ainvoke(
                         {"user_query": user_query, "history": history},
@@ -435,7 +436,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                                 logger.error("Unknown tool: %s", tool_name)
                                 continue
 
-                            logger.debug("Executing tool: %s with args: %s", tool_name, tool_args)
+                            logger.info(
+                                "Executing tool: %s with args: %s", tool_name, tool_args
+                            )
 
                             has_tool_call = True
                             tool_message: ToolMessage = await tool.ainvoke(tool_call)

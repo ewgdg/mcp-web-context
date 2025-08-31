@@ -123,13 +123,10 @@ class Scraper:
                 scroll_speed = random.uniform(
                     1.0, 1.7
                 )  # Vary scrolling speed (1600-2800 px/sec)
-                try:
-                    await asyncio.wait_for(
-                        Scraper.natural_scroll(page, scroll_distance, scroll_speed),
-                        timeout=5,
-                    )
-                except asyncio.TimeoutError:
-                    logging.warning("Scrolling timed out.")
+                await asyncio.wait_for(
+                    Scraper.natural_scroll(page, scroll_distance, scroll_speed),
+                    timeout=6,
+                )
 
                 await asyncio.sleep(random.uniform(0.23, 0.56))
                 await Scraper.wait_or_timeout(page, "load", 2)
@@ -183,7 +180,7 @@ class Scraper:
         await self.wait_or_timeout(page, "load", 5)
         # wait for potential redirection
         await asyncio.sleep(random.uniform(0.3, 0.7))
-        await self.wait_or_timeout(page, "networkidle", 5)
+        await self.wait_or_timeout(page, "networkidle", 2)
 
         await self.scroll_page_to_bottom(page)
 
