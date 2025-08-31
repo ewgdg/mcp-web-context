@@ -53,7 +53,8 @@ WORKDIR /app
 # Set up application directories with correct ownership
 RUN mkdir -p /app/logs /app/cache /app/browser_data
 
-# Install browser dependencies first (cache-friendly layer)
+# Create virtual environment and install browser dependencies first (cache-friendly layer)
+RUN uv venv
 COPY requirements-browser.txt ./
 RUN --mount=type=cache,target=$UV_CACHE_DIR \
     uv pip install -r requirements-browser.txt
