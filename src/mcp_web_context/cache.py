@@ -37,7 +37,7 @@ class Cache(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
-engine = create_async_engine(DB_URL, echo=True)
+engine = create_async_engine(DB_URL, echo=False)
 make_async_session = async_sessionmaker(bind=engine, expire_on_commit=False)
 
 
