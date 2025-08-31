@@ -260,9 +260,15 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
     ) -> List[SearchResultEntry]:
         """Execute a search action."""
         try:
+            # Check for cancellation before starting search
+            await asyncio.sleep(0)
+
             search = GoogleSearch(query=query, query_domains=query_domains)
             results = await search.search(max_results=max_results)
             return results or []
+        except asyncio.CancelledError:
+            logger.info("Search operation cancelled for query: %s", query)
+            raise
         except Exception as e:
             logger.exception("Search failed for query: %s", query)
             return []
@@ -277,6 +283,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
         if not urls:
             return []
 
+        # Check for cancellation before starting analysis
+        await asyncio.sleep(0)
+
         # Initialize web analyzer
         await self.web_analyzer.init_llm()
 
@@ -286,6 +295,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
         async def analyze_single_url(url: str) -> Optional[Evidence]:
             async with semaphore:
                 try:
+                    # Check for cancellation before analyzing each URL
+                    await asyncio.sleep(0)
+
                     request = AnalyzeRequest(
                         url=url,
                         query=query,
@@ -302,6 +314,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                         short_answer=result.short_answer,
                         content=result.relevant_content,
                     )
+                except asyncio.CancelledError:
+                    logger.info("Analysis cancelled for URL: %s", url)
+                    raise
                 except Exception as e:
                     logger.exception("Analysis failed for URL: %s", url)
                     return Evidence(
@@ -322,6 +337,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
         for result in results:
             if isinstance(result, Evidence):
                 evidence.append(result)
+            elif isinstance(result, asyncio.CancelledError):
+                # Re-raise cancellation if any task was cancelled
+                raise result
             elif not isinstance(result, Exception):
                 logger.warning("Unexpected result type: %s", type(result))
 
@@ -344,6 +362,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
 
         Raises:
             ValueError: If agent is already running (use-and-discard pattern)
+            asyncio.CancelledError: If the operation is cancelled
         """
         # Reject concurrent requests - use-and-discard pattern
         if self._is_running or self.current_query is not None:
@@ -367,6 +386,14 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
             history: list[BaseMessage] = []
 
             for iteration in range(max_iterations + 1):
+                # Check for cancellation at the start of each iteration
+                # Using a small sleep to yield control and check for cancellation
+                try:
+                    await asyncio.sleep(0)
+                except asyncio.CancelledError:
+                    logger.info("Search agent cancelled at iteration %d", iteration)
+                    raise
+
                 active_agent = self.agent
                 if iteration == max_iterations:
                     logger.info(
@@ -391,6 +418,15 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                             "LLM wants to use %d tools", len(response.tool_calls)
                         )
                         for tool_call in response.tool_calls:
+                            # Check for cancellation before each tool execution
+                            try:
+                                await asyncio.sleep(0)
+                            except asyncio.CancelledError:
+                                logger.info(
+                                    "Search agent cancelled during tool execution"
+                                )
+                                raise
+
                             tool_name = tool_call["name"]
                             tool_args = tool_call["args"]
 
@@ -428,6 +464,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                         final_answer = response.text()
                         break
 
+                except asyncio.CancelledError:
+                    logger.info("Search agent cancelled during LLM invocation")
+                    raise
                 except Exception:
                     logger.exception("LLM action failed on iteration %d", iteration)
                     # Force exit on LLM failure
@@ -451,6 +490,9 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
             )
             return FinalAnswer(answer=final_answer, references=references)
 
+        except asyncio.CancelledError:
+            logger.info("Search agent operation was cancelled")
+            raise
         finally:
             # Clean up state - agent is now used and should be discarded
             self._is_running = False
