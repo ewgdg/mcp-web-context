@@ -54,16 +54,24 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger = logging.getLogger(__name__)
+    logger.info("🚀 Starting lifespan initialization...")
+
     async with AsyncExitStack() as stack:
         # Initialize cache
+        logger.info("Initializing cache...")
         await initialize_cache()
         stack.push_async_callback(shutdown_cache)
 
         # Initialize scraper
+        logger.info("Initializing scraper...")
         scraper = await stack.enter_async_context(scraper_context_manager())
         service_locator.container.register_singleton(Scraper, scraper)
+        logger.info("Services registered successfully")
 
+        logger.info("✅ Lifespan initialization complete")
         yield
+        logger.info("🔄 Lifespan shutdown starting...")
 
 
 app = FastAPI(
@@ -103,9 +111,12 @@ app.include_router(logs.router)
 app.include_router(agent.router)
 
 # Register MCP tools from routers
+logger = logging.getLogger(__name__)
+logger.info("📋 Registering MCP tools...")
 scraping.register_mcp_tools(mcp)
 search.register_mcp_tools(mcp)
 agent.register_mcp_tools(mcp)
+logger.info("✅ MCP tools registered")
 
 
 # Mount MCP SSE app - it provides /sse and /messages endpoints
