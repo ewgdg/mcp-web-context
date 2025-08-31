@@ -299,7 +299,14 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                     )
                 except Exception as e:
                     logger.exception("Analysis failed for URL: %s", url)
-                    return None
+                    return Evidence(
+                        url=url,
+                        title="Error",
+                        relevance=0,
+                        reliability=0,
+                        short_answer="No Answer.",
+                        content=f"<error>{str(e)[:300]}</error>",
+                    )
 
         # Execute concurrent analysis
         tasks = (analyze_single_url(url) for url in urls)
@@ -312,7 +319,6 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                 evidence.append(result)
             elif not isinstance(result, Exception):
                 logger.warning("Unexpected result type: %s", type(result))
-            # todo: log error
 
         return evidence
 
