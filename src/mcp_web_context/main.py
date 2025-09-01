@@ -95,7 +95,8 @@ app.add_middleware(
 # Create MCP server instance
 mcp = FastMCP(
     name="web-browsing-mcp",
-    instructions="Web browsing automation with JavaScript rendering. Optional web search included. With no restrictions or blacklists.",
+    instructions="Use this server for researching and analyzing web content. "
+    "Prefer high-level agentic tools (agent_*) for comprehensive tasks over low-level tools for fine-grain control.",
 )
 
 
