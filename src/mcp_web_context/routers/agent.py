@@ -36,11 +36,11 @@ class AgentSearchRequest(BaseModel):
 
 
 @router.post(
-    "/search",
+    "/research",
     summary="Intelligent iterative search for comprehensive answers",
     response_model=FinalAnswer,
 )
-async def intelligent_search(request: AgentSearchRequest) -> FinalAnswer:
+async def agent_research_query(request: AgentSearchRequest) -> FinalAnswer:
     """
     Perform intelligent iterative search to find comprehensive answers.
     
@@ -58,11 +58,11 @@ async def intelligent_search(request: AgentSearchRequest) -> FinalAnswer:
 
 
 @router.post(
-    "/analyze",
+    "/extract",
     summary="AI-powered content extraction and analysis",
     response_model=ExtractedContent,
 )
-async def smart_analyze_content(request: AnalyzeRequest) -> ExtractedContent:
+async def agent_extract_content(request: AnalyzeRequest) -> ExtractedContent:
     """
     Extract relevant content from a URL using AI analysis.
 
@@ -78,5 +78,5 @@ async def smart_analyze_content(request: AnalyzeRequest) -> ExtractedContent:
 
 def register_mcp_tools(mcp: FastMCP):
     """Register MCP tools for this router"""
-    mcp.tool()(intelligent_search)
-    mcp.tool()(smart_analyze_content)
+    mcp.tool()(agent_research_query)
+    mcp.tool()(agent_extract_content)

@@ -42,6 +42,8 @@ The service runs in a Docker container with Wayland-based VNC for browser visual
 - `/health` - Health check endpoint
 - `/scrape` - POST endpoint for scraping multiple URLs
 - `/search` - POST endpoint for Google Custom Search
+- `/agent/research` - POST endpoint for intelligent iterative search (`agent_research_query`)
+- `/agent/extract` - POST endpoint for AI-powered content extraction (`agent_extract_content`)
 - `/logs` - GET endpoint for browsing log files with web interface (supports file viewing, right-click deletion, and bulk delete)
 - `/mcp/sse` and `/mcp/messages` - MCP (Model Context Protocol) endpoints
 
@@ -105,7 +107,7 @@ The service includes a browser detection test that visits browserscan.net to ver
 This service implements the Model Context Protocol (MCP) and can be used as an MCP server:
 
 - Provides `/mcp/sse` and `/mcp/messages` endpoints via FastMCP
-- Exposes MCP tools: `fetch_web_content`, `search_web_pages`, `smart_analyze_content`
+- Exposes MCP tools: `fetch_web_content`, `search_web_pages`, `agent_research_query`, `agent_extract_content`
 - MCP server name: "web-browsing-mcp"
 - Can be connected to by MCP clients for programmatic access
 
