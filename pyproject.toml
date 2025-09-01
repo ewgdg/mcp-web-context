@@ -20,9 +20,9 @@ dependencies = [
     "langchain-openai",
     "langchain-anthropic",
     "langchain-ollama",
-    "langchain-community",
     "langchain-google-genai",
     "pyyaml>=6.0.2",
+    "pymupdf4llm"
 ]
 
 [build-system]
