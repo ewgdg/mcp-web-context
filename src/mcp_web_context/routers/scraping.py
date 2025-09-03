@@ -12,6 +12,7 @@ from ..services import get_service
 router = APIRouter(prefix="/scrape", tags=["scraping"])
 logger = logging.getLogger(__name__)
 
+
 class ScrapeResult(BaseModel):
     class ImageData(BaseModel):
         url: str = Field(..., description="Direct URL to the image file")

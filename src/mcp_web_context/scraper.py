@@ -330,14 +330,17 @@ class Scraper:
         try:
             # Kill any existing Chrome processes first
             import subprocess
+
             try:
-                result = subprocess.run(["pkill", "-f", "chrome"], capture_output=True, text=True)
+                result = subprocess.run(
+                    ["pkill", "-f", "chrome"], capture_output=True, text=True
+                )
                 if result.returncode == 0:
                     self.logger.info("Killed existing Chrome processes")
                 await asyncio.sleep(1)  # Give processes time to terminate
             except Exception as e:
                 self.logger.debug(f"No Chrome processes to kill or pkill failed: {e}")
-            
+
             lock_files = ["SingletonLock", "SingletonSocket", "SingletonCookie"]
             removed_count = 0
             for lock_file in lock_files:
@@ -345,7 +348,7 @@ class Scraper:
                 if lock_path.exists() or lock_path.is_symlink():
                     lock_path.unlink(missing_ok=True)
                     removed_count += 1
-                    
+
             if removed_count > 0:
                 self.logger.info(f"Removed {removed_count} Chrome lock files")
         except Exception as e:
@@ -359,7 +362,7 @@ class Scraper:
         if self._shared_context is None:
             # Clean up Chrome lock files before launching
             await self._cleanup_chrome_locks()
-            
+
             self._shared_context = (
                 await self._shared_driver.chromium.launch_persistent_context(
                     user_data_dir=self._user_data_dir,

@@ -12,6 +12,7 @@ from .cache import initialize_cache, shutdown_cache
 from .routers import scraping, search, logs, agent
 from .scraper import scraper_context_manager, Scraper
 from .services import service_locator
+from .mcp_server import create_mcp
 
 
 def setup_logging(config_path: str = "logging.yaml") -> None:
@@ -73,6 +74,7 @@ async def lifespan(app: FastAPI):
         yield
         logger.info("🔄 Lifespan shutdown starting...")
 
+
 instructions = (
     "Use this server for researching and analyzing web content. "
     "Prefer high-level agentic tools (agent_*) for comprehensive tasks over low-level tools for fine-grain control."
@@ -96,11 +98,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create MCP server instance
-mcp = FastMCP(
-    name="web-browsing-mcp",
-    instructions=instructions,
-)
+logger = logging.getLogger(__name__)
+
+# Create MCP server instance (shared builder for all transports)
+mcp = create_mcp(instructions)
 
 
 @app.get("/health")
@@ -114,14 +115,11 @@ app.include_router(search.router)
 app.include_router(logs.router)
 app.include_router(agent.router)
 
-# Register MCP tools from routers
-logger = logging.getLogger(__name__)
-logger.info("📋 Registering MCP tools...")
-scraping.register_mcp_tools(mcp)
-search.register_mcp_tools(mcp)
-agent.register_mcp_tools(mcp)
-logger.info("✅ MCP tools registered")
+logger.info("📋 MCP server initialized")
 
 
-# Mount MCP SSE app - it provides /sse and /messages endpoints
+# Mount both transports for compatibility:
+# - SSE: `/mcp/sse` and `/mcp/messages`
+# - Streamable HTTP: `/mcp` (mounted at root to avoid `/mcp/mcp`)
 app.mount("/mcp", mcp.sse_app())
+app.mount("/", mcp.streamable_http_app())

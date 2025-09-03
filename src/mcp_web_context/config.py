@@ -30,7 +30,9 @@ class ModelConfig(BaseModel):
         None, description="Base URL for API (e.g., for Ollama)"
     )
     temperature: float = Field(0.3, description="Temperature setting for the model")
-    top_p: Optional[float] = Field(None, description="Top-p (nucleus sampling) setting for the model")
+    top_p: Optional[float] = Field(
+        None, description="Top-p (nucleus sampling) setting for the model"
+    )
     reasoning: Optional[Dict[str, Any]] = Field(
         None, description="Reasoning configuration for OpenAI models"
     )

@@ -16,19 +16,19 @@ LOGS_DIR.mkdir(exist_ok=True)
 
 def get_file_browser_html(current_path: Path, request_url: str) -> str:
     """Generate HTML file browser with right-click delete functionality."""
-    
+
     # Calculate relative path from logs root
     try:
         rel_path = current_path.relative_to(LOGS_DIR)
         breadcrumb = str(rel_path) if str(rel_path) != "." else ""
     except ValueError:
         breadcrumb = ""
-    
+
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Log Files Browser - {breadcrumb or 'Root'}</title>
+        <title>Log Files Browser - {breadcrumb or "Root"}</title>
         <style>
             body {{ font-family: Arial, sans-serif; margin: 20px; }}
             .header {{ margin-bottom: 20px; }}
@@ -74,21 +74,25 @@ def get_file_browser_html(current_path: Path, request_url: str) -> str:
         
         <ul class="file-list" id="fileList">
     """
-    
+
     # Add parent directory link if not at root
     if current_path != LOGS_DIR:
         parent_path = current_path.parent
-        parent_rel = parent_path.relative_to(LOGS_DIR) if parent_path != LOGS_DIR else ""
+        parent_rel = (
+            parent_path.relative_to(LOGS_DIR) if parent_path != LOGS_DIR else ""
+        )
         parent_url = f"/logs{'/' + str(parent_rel) if parent_rel else ''}"
         html += f"""
             <li class="file-item">
                 <a href="{parent_url}" class="file-link folder-link">📁 ..</a>
             </li>
         """
-    
+
     if current_path.exists():
-        items = sorted(current_path.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
-        
+        items = sorted(
+            current_path.iterdir(), key=lambda x: (x.is_file(), x.name.lower())
+        )
+
         for item in items:
             item_rel = item.relative_to(LOGS_DIR)
             if item.is_dir():
@@ -102,17 +106,22 @@ def get_file_browser_html(current_path: Path, request_url: str) -> str:
                 file_size = item.stat().st_size
                 size_str = format_file_size(file_size)
                 item_url = f"/logs/{item_rel}"
-                
+
                 # Use different icons for different file types
-                icon = "🖼️" if item.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'] else "📄"
-                
+                icon = (
+                    "🖼️"
+                    if item.suffix.lower()
+                    in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]
+                    else "📄"
+                )
+
                 html += f"""
                     <li class="file-item" data-filename="{item.name}" data-filepath="{item_rel}">
                         <a href="{item_url}" class="file-link">{icon} {item.name}</a>
                         <span class="file-size">{size_str}</span>
                     </li>
                 """
-    
+
     html += """
         </ul>
         
@@ -207,7 +216,7 @@ def get_file_browser_html(current_path: Path, request_url: str) -> str:
     </body>
     </html>
     """
-    
+
     return html
 
 
@@ -215,13 +224,13 @@ def format_file_size(size_bytes: float) -> str:
     """Format file size in human readable format."""
     if size_bytes == 0:
         return "0 B"
-    
+
     size_names = ["B", "KB", "MB", "GB"]
     i = 0
     while size_bytes >= 1024 and i < len(size_names) - 1:
         size_bytes /= 1024.0
         i += 1
-    
+
     return f"{size_bytes:.1f} {size_names[i]}"
 
 
@@ -230,38 +239,64 @@ def format_file_size(size_bytes: float) -> str:
 async def browse_logs(request: Request, path: str = ""):
     """Browse log files and directories."""
     current_path = LOGS_DIR / path if path else LOGS_DIR
-    
+
     # Security check
     try:
         current_path.resolve().relative_to(LOGS_DIR.resolve())
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
-    
+
     # Don't create directories - just return 404 if path doesn't exist
     if not current_path.exists():
         raise HTTPException(status_code=404, detail="Path not found")
-    
+
     # If it's a file, serve it directly
     if current_path.is_file():
         mime_type, _ = mimetypes.guess_type(str(current_path))
         if mime_type is None:
             mime_type = "application/octet-stream"
-        
+
         # Check if download is explicitly requested
-        download = request.query_params.get('download') == '1'
-        
+        download = request.query_params.get("download") == "1"
+
         # Define truly binary file types that should always be downloaded
-        download_only_extensions = {'.zip', '.pdf', '.exe', '.bin', '.gz', '.tar', '.bz2', '.xz', 
-                                  '.mp4', '.avi', '.mp3', '.wav', '.woff', '.woff2', '.ttf', '.otf'}
-        download_only_mime_prefixes = ('video/', 'audio/', 'application/zip', 
-                                     'application/x-', 'application/gzip', 'application/pdf')
-        
+        download_only_extensions = {
+            ".zip",
+            ".pdf",
+            ".exe",
+            ".bin",
+            ".gz",
+            ".tar",
+            ".bz2",
+            ".xz",
+            ".mp4",
+            ".avi",
+            ".mp3",
+            ".wav",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".otf",
+        }
+        download_only_mime_prefixes = (
+            "video/",
+            "audio/",
+            "application/zip",
+            "application/x-",
+            "application/gzip",
+            "application/pdf",
+        )
+
         # Check if it's a download-only file
-        is_download_only = (current_path.suffix.lower() in download_only_extensions or 
-                          any(mime_type.startswith(prefix) for prefix in download_only_mime_prefixes))
-        
+        is_download_only = (
+            current_path.suffix.lower() in download_only_extensions
+            or any(
+                mime_type.startswith(prefix) for prefix in download_only_mime_prefixes
+            )
+        )
+
         # For images, display with HTML wrapper
-        if mime_type.startswith('image/') and not download:
+        if mime_type.startswith("image/") and not download:
             icon = "🖼️"
             html_content = f"""
             <!DOCTYPE html>
@@ -293,7 +328,7 @@ async def browse_logs(request: Request, path: str = ""):
             <body>
                 <div class="header">
                     <h1>{icon} {current_path.name}</h1>
-                    <a href="/logs/{current_path.parent.relative_to(LOGS_DIR) if current_path.parent != LOGS_DIR else ''}" class="back-link">← Back to logs</a>
+                    <a href="/logs/{current_path.parent.relative_to(LOGS_DIR) if current_path.parent != LOGS_DIR else ""}" class="back-link">← Back to logs</a>
                     <a href="/logs/{current_path.relative_to(LOGS_DIR)}?download=1" class="download-btn">Download</a>
                 </div>
                 <div class="image-container">
@@ -303,24 +338,34 @@ async def browse_logs(request: Request, path: str = ""):
             </html>
             """
             return HTMLResponse(content=html_content)
-        
+
         # For text files, try to display with HTML wrapper unless download is requested
         if not is_download_only and not download:
             try:
-                with open(current_path, 'r', encoding='utf-8') as f:
+                with open(current_path, "r", encoding="utf-8") as f:
                     file_content = f.read()
-                
+
                 # Get appropriate icon for file type
                 icon = "📄"
-                if current_path.suffix.lower() in {'.log', '.txt'}:
+                if current_path.suffix.lower() in {".log", ".txt"}:
                     icon = "📄"
-                elif current_path.suffix.lower() in {'.py', '.js', '.ts', '.html', '.css', '.json', '.xml', '.yaml', '.yml'}:
+                elif current_path.suffix.lower() in {
+                    ".py",
+                    ".js",
+                    ".ts",
+                    ".html",
+                    ".css",
+                    ".json",
+                    ".xml",
+                    ".yaml",
+                    ".yml",
+                }:
                     icon = "📝"
-                elif current_path.suffix.lower() in {'.md'}:
+                elif current_path.suffix.lower() in {".md"}:
                     icon = "📖"
-                elif current_path.suffix.lower() in {'.csv'}:
+                elif current_path.suffix.lower() in {".csv"}:
                     icon = "📊"
-                
+
                 html_content = f"""
                 <!DOCTYPE html>
                 <html>
@@ -350,7 +395,7 @@ async def browse_logs(request: Request, path: str = ""):
                 <body>
                     <div class="header">
                         <h1>{icon} {current_path.name}</h1>
-                        <a href="/logs/{current_path.parent.relative_to(LOGS_DIR) if current_path.parent != LOGS_DIR else ''}" class="back-link">← Back to logs</a>
+                        <a href="/logs/{current_path.parent.relative_to(LOGS_DIR) if current_path.parent != LOGS_DIR else ""}" class="back-link">← Back to logs</a>
                         <a href="/logs/{current_path.relative_to(LOGS_DIR)}?download=1" class="download-btn">Download</a>
                     </div>
                     <div class="file-content">{file_content}</div>
@@ -361,21 +406,16 @@ async def browse_logs(request: Request, path: str = ""):
             except UnicodeDecodeError:
                 # If file can't be read as text, treat as binary
                 is_download_only = True
-        
+
         # For binary files or when download is requested, serve as download
         if is_download_only or download:
             return FileResponse(
-                path=str(current_path), 
-                filename=current_path.name,
-                media_type=mime_type
+                path=str(current_path), filename=current_path.name, media_type=mime_type
             )
         else:
             # Fallback for inline display without wrapper (shouldn't normally reach here)
-            return FileResponse(
-                path=str(current_path),
-                media_type=mime_type
-            )
-    
+            return FileResponse(path=str(current_path), media_type=mime_type)
+
     # It's a directory, show the browser
     html_content = get_file_browser_html(current_path, str(request.url))
     return HTMLResponse(content=html_content)
@@ -385,19 +425,19 @@ async def browse_logs(request: Request, path: str = ""):
 async def delete_file(filepath: str):
     """Delete a specific file."""
     file_path = LOGS_DIR / filepath
-    
+
     # Security check
     try:
         file_path.resolve().relative_to(LOGS_DIR.resolve())
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid file path")
-    
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     if not file_path.is_file():
         raise HTTPException(status_code=400, detail="Not a file")
-    
+
     file_path.unlink()
     return JSONResponse({"message": f"File deleted successfully"})
 
@@ -406,21 +446,21 @@ async def delete_file(filepath: str):
 async def delete_folder(folderpath: str):
     """Delete a folder and all its contents."""
     import shutil
-    
+
     folder_path = LOGS_DIR / folderpath
-    
+
     # Security check
     try:
         folder_path.resolve().relative_to(LOGS_DIR.resolve())
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid folder path")
-    
+
     if not folder_path.exists():
         raise HTTPException(status_code=404, detail="Folder not found")
-    
+
     if not folder_path.is_dir():
         raise HTTPException(status_code=400, detail="Not a folder")
-    
+
     shutil.rmtree(folder_path)
     return JSONResponse({"message": f"Folder deleted successfully"})
 
@@ -429,24 +469,24 @@ async def delete_folder(folderpath: str):
 async def delete_all_items(request: Request):
     """Delete all files and folders in the current directory."""
     import shutil
-    
+
     request_data = await request.json()
     path = request_data.get("path", "/logs").replace("/logs", "").lstrip("/")
-    
+
     current_path = LOGS_DIR / path if path else LOGS_DIR
-    
+
     # Security check
     try:
         current_path.resolve().relative_to(LOGS_DIR.resolve())
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
-    
+
     if not current_path.exists():
         return JSONResponse({"message": "Directory does not exist"})
-    
+
     deleted_files = 0
     deleted_folders = 0
-    
+
     for item in current_path.iterdir():
         if item.is_file():
             item.unlink()
@@ -454,10 +494,10 @@ async def delete_all_items(request: Request):
         elif item.is_dir():
             shutil.rmtree(item)
             deleted_folders += 1
-    
+
     total_deleted = deleted_files + deleted_folders
     message = f"Deleted {deleted_files} files"
     if deleted_folders > 0:
         message += f" and {deleted_folders} folders"
-    
+
     return JSONResponse({"message": message})

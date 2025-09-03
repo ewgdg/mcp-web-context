@@ -65,6 +65,7 @@ class WebContentAnalyzer:
     Simple web content analyzer that uses AI to extract
     relevant content from a single URL based on user queries.
     """
+
     def __init__(self):
         """Initialize the analyzer with model fallback support."""
         self.config_manager = get_config_manager()
@@ -140,11 +141,13 @@ Remarks Guidelines:
 
             # Build the complete agent chain
             structured_llm = self.llm.with_structured_output(LLMExtraction)
-            
+
             # Set prompt cache key for OpenAI models
             if model_config and model_config.provider == "openai":
-                structured_llm = structured_llm.bind(prompt_cache_key=self.__class__.__name__)
-            
+                structured_llm = structured_llm.bind(
+                    prompt_cache_key=self.__class__.__name__
+                )
+
             self.agent = self.prompt | structured_llm
 
     async def analyze_url(self, request: AnalyzeRequest) -> ExtractedContent:

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 import os
+
 DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 EXPIRY_MINUTES = 30
 

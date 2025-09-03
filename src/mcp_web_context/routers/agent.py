@@ -43,17 +43,17 @@ class AgentSearchRequest(BaseModel):
 async def agent_research_query(request: AgentSearchRequest) -> FinalAnswer:
     """
     Perform intelligent iterative search to find comprehensive answers.
-    
+
     The agent will search, analyze, and reason iteratively until it has
     sufficient confidence to provide a well-sourced comprehensive answer.
     """
     agent = IntelligentSearchAgent()
-    
+
     result = await agent.run(
         user_query=request.query,
         max_iterations=request.max_iterations,
     )
-    
+
     return result
 
 

@@ -39,10 +39,11 @@ Copy `.env.example` to `.env` and configure your API keys. See `config.yaml` for
 
 ## API Endpoints
 
-- `GET /health` - Health check
-- `GET /docs` - OpenAPI documentation
-- `GET /logs` - Web-based log file browser with delete functionality
-- `/mcp/sse` - MCP server endpoints (provided by FastMCP)
+- `GET /health`: Health check
+- `GET /docs`: OpenAPI documentation
+- `GET /logs`: Web-based log file browser with delete functionality
+- `/mcp`: MCP endpoint (Streamable HTTP transport)
+- `/mcp/sse` and `/mcp/messages`: Legacy SSE transport (compatibility)
 
 ## MCP Tools
 
@@ -58,3 +59,8 @@ Copy `.env.example` to `.env` and configure your API keys. See `config.yaml` for
 - Google Custom Search API credentials
 - AI provider API key (OpenAI, Anthropic, etc.)
 - Firefox ESR (handled automatically in Docker)
+
+## MCP Transports
+
+- Streamable HTTP: available at `/mcp` (recommended)
+- SSE: available at `/mcp/sse` and `/mcp/messages` (legacy/compat)

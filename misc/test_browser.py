@@ -80,7 +80,7 @@ async def main() -> None:
             # Close the page before releasing the browser
             if page:
                 await page.close()
-    
+
     await scraper.cleanup_on_exit()
 
 
