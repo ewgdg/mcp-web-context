@@ -171,7 +171,32 @@ class Scraper:
         self, page: Page, url: str, output_format: Literal["text", "markdown", "html"]
     ) -> Tuple[str, list[dict[str, Any]], str]:
         """Perform the actual scraping operation on a page"""
-        await page.goto(url)
+        # Use browser navigation response to keep fingerprint clean and detect PDFs reliably
+        response = await page.goto(url)
+
+        # If navigation returns a PDF, parse it directly from the response body
+        try:
+            content_type = (
+                (response.headers.get("content-type") if response else "") or ""
+            ).lower()
+            content_disp = (
+                (response.headers.get("content-disposition") if response else "") or ""
+            ).lower()
+            # Robust, fingerprint-clean detection via response headers only
+            is_pdf = ("application/pdf" in content_type) or (
+                "filename=" in content_disp and ".pdf" in content_disp
+            )
+            if is_pdf and response is not None:
+                try:
+                    pdf_bytes = await response.body()
+                    content, title = Scraper._parse_pdf_to_markdown(pdf_bytes)
+                    return content, [], title
+                except Exception as e:
+                    # Any issue in detection/parsing: proceed with standard HTML flow
+                    self.logger.warning(f"PDF handling failed; continue as HTML: {e}")
+        except Exception:
+            # Any issue in detection/parsing: proceed with standard HTML flow
+            pass
 
         if page is None:
             self.logger.error(f"Failed to open page for {url}: page is None")
@@ -246,6 +271,21 @@ class Scraper:
                 )
 
         return content, image_urls, title
+
+    @staticmethod
+    def _parse_pdf_to_markdown(pdf_bytes: bytes) -> Tuple[str, str]:
+        """Convert PDF bytes to (markdown, title) using PyMuPDF and pymupdf4llm."""
+        import pymupdf
+        import pymupdf4llm
+
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        content = pymupdf4llm.to_markdown(doc)
+        title = (
+            doc.metadata.get("title", "pdf_document")
+            if doc.metadata
+            else "pdf_document"
+        )
+        return content, title
 
     async def _release_context(self) -> None:
         """Clean up context and driver when no active scraping pages remain"""

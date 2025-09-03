@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import Sequence, Literal
 from fastapi import APIRouter
-import httpx
 from pydantic import BaseModel, Field
 from mcp.server.fastmcp import FastMCP
 
@@ -61,48 +60,16 @@ class ScrapeResponse(BaseModel):
 scrape_semaphore = asyncio.Semaphore(20)
 
 
-async def _handle_pdf(pdf_url: str):
-    """Download a PDF, convert to markdown, and return (content, images, title)."""
-    import httpx
-    import pymupdf
-    import pymupdf4llm
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(pdf_url)
-        resp.raise_for_status()
-    pdf_bytes = resp.content
-    doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
-    content = pymupdf4llm.to_markdown(doc)
-    images = []
-    title = (
-        doc.metadata.get("title", "pdf_document") if doc.metadata else "pdf_document"
-    )
-    return content, images, title
-
-
 async def _scrape(
     url: str,
     scraper: Scraper,
     output_format: Literal["text", "markdown", "html"] = "markdown",
 ) -> ScrapeResult:
     async with scrape_semaphore:
-        # Fetch headers only (HEAD request) to check content type
-        content_type = ""
-
-        async with httpx.AsyncClient(timeout=10) as client:
-            try:
-                response = await client.head(url, follow_redirects=True)
-                content_type = response.headers.get("Content-Type", "").lower()
-            except httpx.RequestError as e:
-                logger.error(f"Error fetching headers: {e}")
-                return ScrapeResult(content=str(e), images=[], title="")
-        if "application/pdf" in content_type:
-            # Fetch PDF and convert to markdown
-            content, images, title = await _handle_pdf(url)
-        else:
-            content, images, title = await scraper.scrape_async(
-                url, output_format=output_format
-            )
+        # Keep fingerprint clean: let the browser handle PDFs/HTML uniformly.
+        content, images, title = await scraper.scrape_async(
+            url, output_format=output_format
+        )
         return ScrapeResult(
             content=content,
             images=[ScrapeResult.ImageData.model_validate(img) for img in images],
