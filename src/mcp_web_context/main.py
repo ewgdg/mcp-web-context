@@ -73,11 +73,15 @@ async def lifespan(app: FastAPI):
         yield
         logger.info("🔄 Lifespan shutdown starting...")
 
+instructions = (
+    "Use this server for researching and analyzing web content. "
+    "Prefer high-level agentic tools (agent_*) for comprehensive tasks over low-level tools for fine-grain control."
+)
 
 app = FastAPI(
     title="Web Browsing API",
     version="0.1.0",
-    description="Search or browse the web using search engine like Google. a typical usage is to search for grounding facts and then scrape the urls from the results for details.",
+    description=instructions,
     lifespan=lifespan,
     disable_existing_loggers=False,
 )
@@ -95,8 +99,7 @@ app.add_middleware(
 # Create MCP server instance
 mcp = FastMCP(
     name="web-browsing-mcp",
-    instructions="Use this server for researching and analyzing web content. "
-    "Prefer high-level agentic tools (agent_*) for comprehensive tasks over low-level tools for fine-grain control.",
+    instructions=instructions,
 )
 
 
