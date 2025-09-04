@@ -8,8 +8,8 @@ from fastapi import APIRouter
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-from ..agents.intelligent_search_agent import (
-    IntelligentSearchAgent,
+from ..agents.research_agent import (
+    ResearchAgent,
     FinalAnswer,
 )
 from ..agents.web_content_analyzer import (
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 class AgentSearchRequest(BaseModel):
-    """Request model for intelligent search agent."""
+    """Request model for research agent."""
 
     query: str = Field(
         ..., description="The search query to find comprehensive answer for"
@@ -37,17 +37,17 @@ class AgentSearchRequest(BaseModel):
 
 @router.post(
     "/research",
-    summary="Intelligent iterative search for comprehensive answers",
+    summary="Iterative research for comprehensive answers",
     response_model=FinalAnswer,
 )
 async def agent_research_query(request: AgentSearchRequest) -> FinalAnswer:
     """
-    Perform intelligent iterative search to find comprehensive answers.
+    Perform iterative research to find comprehensive answers.
 
     The agent will search, analyze, and reason iteratively until it has
     sufficient confidence to provide a well-sourced comprehensive answer.
     """
-    agent = IntelligentSearchAgent()
+    agent = ResearchAgent()
 
     result = await agent.run(
         user_query=request.query,

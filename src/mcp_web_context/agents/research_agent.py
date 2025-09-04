@@ -1,7 +1,7 @@
 """
-Intelligent Search Agent
+Research Agent
 
-An iterative search-analyze agent that finds comprehensive answers by using web search
+An iterative search–analyze agent that finds comprehensive answers by using web search
 and content analysis in a loop until confident enough. The LLM decides when to exit
 the loop and provides final answers with cited references.
 """
@@ -57,7 +57,7 @@ class FinalAnswer(BaseModel):
     )
 
 
-class IntelligentSearchAgent:
+class ResearchAgent:
     """
     Intelligent search agent that iteratively searches and analyzes content
     until it has enough confidence to provide a comprehensive answer.
@@ -70,7 +70,7 @@ class IntelligentSearchAgent:
     MAX_CONCURRENCY = 5  # Maximum concurrent URL analysis requests
 
     def __init__(self):
-        """Initialize the intelligent search agent."""
+        """Initialize the research agent."""
         self.config_manager = get_config_manager()
         self.llm: Optional[BaseChatModel] = None
         self.agent: Optional[Runnable[Any, AIMessage]] = None
@@ -93,7 +93,7 @@ class IntelligentSearchAgent:
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the agent."""
-        return """You are an intelligent search agent that helps find comprehensive answers by iteratively searching and analyzing web content.
+        return """You are a research agent that helps find comprehensive answers by iteratively searching and analyzing web content.
 
 Your goal is to gather enough high-quality evidence to generate a final report to the user's query comprehensively. 
 
@@ -162,10 +162,10 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
         """Initialize the LLM using fallback system."""
         if self.agent is None:
             self.llm, self.model_config = await self.config_manager.get_working_llm(
-                "intelligent_search_agent"
+                "research_agent"
             )
             if self.llm is None:
-                raise ValueError("No working models found for intelligent_search_agent")
+                raise ValueError("No working models found for research_agent")
 
             # Set prompt cache key for OpenAI models first
             self.llm = cast(
@@ -269,7 +269,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
         except asyncio.CancelledError:
             logger.info("Search operation cancelled for query: %s", query)
             raise
-        except Exception as e:
+        except Exception:
             logger.exception("Search failed for query: %s", query)
             return []
 
