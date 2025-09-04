@@ -203,36 +203,6 @@ class ConfigManager:
                     reasoning=bool(model_config.reasoning),
                 )
 
-            elif model_config.provider == "llamacpp":
-                from langchain_community.llms import LlamaCpp
-
-                # LlamaCpp requires model_path parameter
-                if not model_config.model_path:
-                    logger.error("llamacpp provider requires 'model_path' parameter")
-                    return None
-
-                kwargs = {
-                    "model_path": model_config.model_path,
-                    "temperature": model_config.temperature,
-                    "verbose": False,  # Set to True for debugging
-                }
-
-                # Optional parameters with defaults
-                if model_config.top_p is not None:
-                    kwargs["top_p"] = model_config.top_p
-                if model_config.n_ctx:
-                    kwargs["n_ctx"] = model_config.n_ctx
-                if model_config.n_gpu_layers is not None:
-                    kwargs["n_gpu_layers"] = model_config.n_gpu_layers
-                if model_config.n_batch:
-                    kwargs["n_batch"] = model_config.n_batch
-                if model_config.max_tokens:
-                    kwargs["max_tokens"] = model_config.max_tokens
-                if model_config.f16_kv is not None:
-                    kwargs["f16_kv"] = model_config.f16_kv
-
-                return LlamaCpp(**kwargs)
-
             elif model_config.provider == "google":
                 from langchain_google_genai import ChatGoogleGenerativeAI
 
