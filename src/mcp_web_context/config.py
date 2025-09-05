@@ -178,9 +178,10 @@ class ConfigManager:
                 )
 
             elif model_config.provider == "openai-compatible":
-                from langchain_openai import ChatOpenAI
+                # Use custom subclass that captures extra provider fields
+                from .chat_model.custom_chatopenai import ChatOpenAIWithCustomFields
 
-                return ChatOpenAI(
+                return ChatOpenAIWithCustomFields(
                     model=model_config.model,
                     api_key=api_key,
                     temperature=model_config.temperature,

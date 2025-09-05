@@ -190,6 +190,80 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                 Runnable[Any, AIMessage], self.prompt | llm_with_exit_only
             )
 
+    def _extract_reasoning_text(self, msg: AIMessage) -> Optional[str]:
+        """Extract reasoning text from additional_kwargs for compatible providers.
+
+        Handles various shapes like:
+        - {"reasoning": "..."}
+        - {"reasoning": {"content": "..."}}
+        - {"reasoning_content": "..."}
+        - {"thinking": "..."}
+        """
+        ak = getattr(msg, "additional_kwargs", None) or {}
+        if not isinstance(ak, dict):
+            return None
+
+        # Prefer explicit "reasoning" field
+        val = ak.get("reasoning")
+        if val is None:
+            val = ak.get("reasoning_content") or ak.get("thinking")
+
+        if val is None:
+            return None
+
+        # Normalize into text
+        if isinstance(val, str):
+            return val.strip() or None
+        if isinstance(val, dict):
+            # Common nested shapes: {content|text}
+            nested = (
+                val.get("content")
+                if isinstance(val.get("content"), str)
+                else val.get("text")
+            )
+            if isinstance(nested, str):
+                return nested.strip() or None
+        # Fallback
+        try:
+            return str(val)
+        except Exception:
+            return None
+
+    def _inject_reasoning_into_message(self, msg: AIMessage) -> None:
+        """Insert <think>reasoning</think> as a separate text block.
+
+        Always injects a leading content block of shape
+        {"type": "text", "text": "<think>...</think>"} and preserves the
+        original content as its own block.
+        """
+        # Only apply for openai-compatible providers
+        if not getattr(self, "model_config", None):
+            return None
+        if self.model_config and self.model_config.provider != "openai-compatible":
+            return None
+
+        reasoning_text = self._extract_reasoning_text(msg)
+        if not reasoning_text:
+            return None
+
+        original_content = msg.content
+        think_block = {"type": "text", "text": f"<think>{reasoning_text}</think>"}
+
+        new_blocks: list[Any] = [think_block]
+        if isinstance(original_content, list):
+            new_blocks.extend(original_content)
+        else:
+            if original_content:
+                new_blocks.append({"type": "text", "text": str(original_content)})
+
+        try:
+            msg.content = new_blocks
+        except Exception:
+            logger.exception("Failed to inject <think> block into AIMessage")
+        return None
+
+    # No stripping helpers needed since think blocks are only injected when continuing.
+
     def _calculate_confidence(self, evidence: List[Evidence]) -> float:
         """Calculate overall confidence based on evidence quality."""
         if not evidence:
@@ -409,7 +483,7 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                         {"user_query": user_query, "history": history},
                     )
 
-                    # Add LLM response to history
+                    # Append response to history as-is first; we'll inject later if continuing
                     history.append(response)
 
                     has_tool_call = False
@@ -447,9 +521,10 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                             history.append(tool_message)
 
                             if tool.return_direct:
+                                # Prepare user-facing text directly from response and tool
                                 final_answer = ""
                                 response_text = response.text()
-                                tool_message_text = tool_message.text()
+                                tool_message_text = tool_message.text() or ""
                                 if response_text:
                                     final_answer += response_text
                                 if tool_message_text:
@@ -462,10 +537,15 @@ Always be strategic about your actions and aim for high-quality, comprehensive a
                     if final_answer is not None:
                         break
 
+                    # If no tool call, force exit with the model's text
                     if not has_tool_call:
                         logger.warning("No tool call in response - forcing exit")
                         final_answer = response.text()
                         break
+
+                    # We did not return a final answer; inject think now for next turn
+                    if final_answer is None:
+                        self._inject_reasoning_into_message(response)
 
                 except asyncio.CancelledError:
                     logger.info("Search agent cancelled during LLM invocation")
