@@ -8,15 +8,9 @@ models:
         - provider: "openai"
           model: "gpt-5-mini"
           api_key_env: "OPENAI_API_KEY"
-          temperature: 1
           reasoning:
             effort: "low"
-            summary: null
-        - provider: "ollama"
-          model: "gemma3n"
-          base_url: "http://localhost:11434/v1"
-          temperature: 0.5
-    
+      
     research_agent:
       models:
         - provider: "openai"
