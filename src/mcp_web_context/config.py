@@ -36,6 +36,12 @@ class ModelConfig(BaseModel):
     reasoning: Optional[Dict[str, Any]] = Field(
         None, description="Reasoning configuration for OpenAI models"
     )
+    include: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Responses API 'include' fields (e.g., ['reasoning.encrypted_content'])."
+        ),
+    )
 
     # LlamaCpp specific parameters
     model_path: Optional[str] = Field(
@@ -153,12 +159,18 @@ class ConfigManager:
             if model_config.provider == "openai":
                 from langchain_openai import ChatOpenAI
 
+                # Auto-request encrypted reasoning items when using reasoning models
+                include: Optional[List[str]] = (
+                    model_config.include[:] if model_config.include else None
+                )
+
                 return ChatOpenAI(
                     model=model_config.model,
                     api_key=api_key,
                     temperature=model_config.temperature,
                     top_p=model_config.top_p,
                     reasoning=model_config.reasoning,
+                    include=include,
                     output_version="responses/v1",
                     # prefer concise responses
                     # verbosity="low", # todo: add it back when langchain supports it
