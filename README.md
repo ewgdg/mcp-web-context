@@ -49,7 +49,7 @@ Copy `.env.example` to `.env` and configure your API keys. See `config.yaml` for
 
 - `fetch_web_content`: Extract content from web pages
 - `search_web_pages`: Search using Google Custom Search  
-- `agent_research_query`: Intelligent iterative search with multi-step reasoning
+- `agent_websearch`: Intelligent iterative search with multi-step reasoning
 - `agent_extract_content`: AI-powered content extraction and analysis
 
 ## Requirements

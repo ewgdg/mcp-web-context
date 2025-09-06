@@ -40,7 +40,7 @@ class AgentSearchRequest(BaseModel):
     summary="Iterative research for comprehensive answers",
     response_model=FinalAnswer,
 )
-async def agent_research_query(request: AgentSearchRequest) -> FinalAnswer:
+async def agent_websearch(request: AgentSearchRequest) -> FinalAnswer:
     """
     Perform iterative research to find comprehensive answers.
 
@@ -78,5 +78,5 @@ async def agent_extract_content(request: AnalyzeRequest) -> ExtractedContent:
 
 def register_mcp_tools(mcp: FastMCP):
     """Register MCP tools for this router"""
-    mcp.tool()(agent_research_query)
+    mcp.tool()(agent_websearch)
     mcp.tool()(agent_extract_content)
