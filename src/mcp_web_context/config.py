@@ -160,9 +160,11 @@ class ConfigManager:
                 from langchain_openai import ChatOpenAI
 
                 # Auto-request encrypted reasoning items when using reasoning models
-                include: Optional[List[str]] = (
-                    model_config.include[:] if model_config.include else None
+                include: List[str] = (
+                    model_config.include[:] if model_config.include else []
                 )
+                if "reasoning.encrypted_content" not in include:
+                    include.append("reasoning.encrypted_content")
 
                 return ChatOpenAI(
                     model=model_config.model,
@@ -170,6 +172,8 @@ class ConfigManager:
                     temperature=model_config.temperature,
                     top_p=model_config.top_p,
                     reasoning=model_config.reasoning,
+                    # support reasoning.encrypted_content
+                    store=False,
                     include=include,
                     output_version="responses/v1",
                     # prefer concise responses
