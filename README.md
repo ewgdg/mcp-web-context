@@ -33,6 +33,10 @@ cp .env.example .env  # Edit with your API keys
 uv run -- uvicorn 'src.mcp_web_context.main:app' --host=0.0.0.0 --port=8000
 ```
 
+```bash
+uv run pre-commit install  # install pre-commit hook
+```
+
 ## Configuration
 
 Copy `.env.example` to `.env` and configure your API keys. See `config.yaml` for AI provider configuration (supports OpenAI, OpenAI-compatible, Anthropic, Ollama, etc.).
