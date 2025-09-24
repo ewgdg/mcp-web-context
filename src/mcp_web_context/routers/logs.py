@@ -234,6 +234,7 @@ def format_file_size(size_bytes: float) -> str:
     return f"{size_bytes:.1f} {size_names[i]}"
 
 
+@router.get("")
 @router.get("/")
 @router.get("/{path:path}")
 async def browse_logs(request: Request, path: str = ""):
